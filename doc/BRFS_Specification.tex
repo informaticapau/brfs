@@ -1,0 +1,53 @@
+\documentclass[]{article}
+\usepackage[a4paper,margin=1in]{geometry}
+\usepackage{fancyhdr}
+\usepackage{vhistory}
+
+\pagestyle{fancy}
+
+%title page
+\lhead{Working Draft}
+\rhead{Revision 0.2b}
+
+\title{
+	\textbf{BRFS Specification} \\
+	\large Bruno Filesystem (formerly BOOT-ROOT)
+}
+\author{
+	Angel Ruiz Fernandez \textless arf20\textgreater \\
+	Bruno Castro García  \textless bruneo32\textgreater
+}
+
+\setcounter{tocdepth}{4}
+\setcounter{secnumdepth}{4}
+
+
+\begin{document}
+
+	\maketitle
+	\thispagestyle{fancy}
+	
+	\begin{abstract}
+		This specification document describes the BRFS filesystem structure used to store data on storage devices. This provides a standard common description of the filesystem for developers to implement freely.
+	\end{abstract}
+
+	\begin{versionhistory}
+		\vhEntry{0.1}{}{bruneo32}{Created}
+		\vhEntry{0.2}{}{bruneo32}{Unknown}
+		\vhEntry{0.2b}{}{bruneo32, arf20}{This document}
+	\end{versionhistory}
+
+	\pagebreak
+	
+	\tableofcontents
+	\pagebreak
+	
+	\section{Introduction}
+	\subsection{Scope}
+	
+	This document defines the Bruno Filesystem. As a filesystem it provides a way of structuring data in a block-based (i.e. LBA) storage device. It is meant for embedded systems where a ciomplex filesystem is not needed, this is not a replacement for any modern desktop filesystem such as ext4, because it lacks basic features of journaling. Although BRFS is able to address large volumes, it is not recommended.
+	
+	\subsection{Definitions}
+	\subsection{Advantages and disadvantages}
+
+\end{document}

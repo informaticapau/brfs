@@ -2,6 +2,8 @@
 \usepackage[a4paper,margin=1in]{geometry}
 \usepackage{fancyhdr}
 \usepackage{vhistory}
+\usepackage{tabto}
+\usepackage{tabularx}
 
 \pagestyle{fancy}
 
@@ -48,6 +50,80 @@
 	This document defines the Bruno Filesystem. As a filesystem it provides a way of structuring data in a block-based (i.e. LBA) storage device. It is meant for embedded systems where a ciomplex filesystem is not needed, this is not a replacement for any modern desktop filesystem such as ext4, because it lacks basic features of journaling. Although BRFS is able to address large volumes, it is not recommended.
 	
 	\subsection{Definitions}
+	
+	Key words will be refferred to with a \texttt{monospace font}.
+	
+	\begin{itemize}
+		\item block: Minimum filesystem unit of data
+		\item inode: File or directory entry
+	\end{itemize}
+	
 	\subsection{Advantages and disadvantages}
+	
+	\begin{tabularx}{\textwidth}{X|X}
+		\textbf{Advantages} & \textbf{Disadvantages} \\
+		\hline
+		TODO when defined
+	\end{tabularx}
+
+	\subsection{Volume layout}
+	
+	\begin{itemize}
+		\item Superblock
+		\item Root inode
+		\item <other inodes>
+	\end{itemize}
+
+	\section{Superblock}
+	
+	The superblock records properties of the enclosed filesystem, such as the block size, pointer size and atribute size. It is 1 block in size. The remaining block will be padded with zeroes.
+	
+	\subsection{Superblock layout}
+	
+	\begin{tabular}{|l|l|} 
+		\hline
+		\textbf{Size (bytes)} & \textbf{Field (Unsigned integer)} \\ [0.5ex] 
+		\hline
+		4 & Magic number "BRFS" 0x42524653  \\ 
+		\hline
+		1 & Block size in LBAs \\
+		\hline
+		1 & Pointer size in bits, power of 2 \\
+		\hline
+		1 & Attribute size in bytes \\
+		\hline
+		b-6 & Padding 0x00... \\
+		\hline	
+	\end{tabular}
+
+	\subsection{Theorical limits}
+	
+	\begin{tabular}{|l|l|} 
+		\hline
+		\textbf{Property} & \textbf{Limit} \\ [0.5ex] 
+		\hline
+		Block size & 256 \\ 
+		\hline
+		Pointer size & 256 \\
+		\hline
+		Attribute size & 256 \\
+		\hline
+		Addresseable blocks & $2^{256}$ \\
+		\hline	
+		Addresseable LBAs & $256 \cdot 2^{256}$ \\
+		\hline
+		Absolute maxium capacity (512-byte LBA) & $512 \cdot 256 \cdot 2^{256}$ There is no prefix large enough \\
+		\hline
+	\end{tabular}\\
+
+	The maximum capacity of the filesystem is calculated as follows
+	\begin{equation}
+		C = L \cdot B \cdot 2^p
+	\end{equation}
+	Where $p$ is pointer size, $B$ is block size and $L$ is LBA size.
+	
+	Some examples of reasonable configurations (assuming 512-byte LBA) are $p = 32$, $B = 8$, which gives 16 TiB capacity; or for more efficient storage, $p = 64$, $B = 1$: 8 YiB; for embedded systems perhaps only a $p = 16$ $B = 1$ is needed, for 32 MiB.
+	
+	
 
 \end{document}

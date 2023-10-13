@@ -80,19 +80,19 @@
 	
 	\subsection{Superblock layout}
 	
-	\begin{tabular}{|l|l|} 
+	\begin{tabular}{|l|l|l|} 
 		\hline
-		\textbf{Size (bytes)} & \textbf{Field (Unsigned integer)} \\ [0.5ex] 
+		\textbf{Size (bytes)} & \textbf{Field (Unsigned integer)} & \textbf{Value} \\ [0.5ex] 
 		\hline
-		4 & Magic number "BRFS" 0x42524653  \\ 
+		4 & Magic number & "BRFS" 0x42524653  \\ 
 		\hline
-		1 & Block size in LBAs \\
+		1 & Block size in LBAs & 0-255 (+1) \\
 		\hline
-		1 & Pointer size in bits, power of 2 \\
+		1 & Pointer size in bits & 16, 32, or 64 \\
 		\hline
-		1 & Attribute size in bytes \\
+		1 & Attribute size in bytes & 0-255 (+1) \\
 		\hline
-		b-6 & Padding 0x00... \\
+		b-6 & Padding... & 0x00 \\
 		\hline	
 	\end{tabular}
 
@@ -104,15 +104,15 @@
 		\hline
 		Block size & 256 \\ 
 		\hline
-		Pointer size & 256 \\
+		Pointer size & 64 \\
 		\hline
 		Attribute size & 256 \\
 		\hline
-		Addresseable blocks & $2^{256}$ \\
+		Addresseable blocks & $2^{64}$ \\
 		\hline	
-		Addresseable LBAs & $256 \cdot 2^{256}$ \\
+		Addresseable LBAs & $256 \cdot 2^{64}$ \\
 		\hline
-		Absolute maxium capacity (512-byte LBA) & $512 \cdot 256 \cdot 2^{256}$ There is no prefix large enough \\
+		Absolute maxium capacity (512-byte LBA) & $512 \cdot 256 \cdot 2^{64} \approx $ 2 YiB \\
 		\hline
 	\end{tabular}\\
 
@@ -122,7 +122,7 @@
 	\end{equation}
 	Where $p$ is pointer size, $B$ is block size and $L$ is LBA size.
 	
-	Some examples of reasonable configurations (assuming 512-byte LBA) are $p = 32$, $B = 8$, which gives 16 TiB capacity; or for more efficient storage, $p = 64$, $B = 1$: 8 YiB; for embedded systems perhaps only a $p = 16$ $B = 1$ is needed, for 32 MiB.
+	Some examples of reasonable configurations (assuming 512-byte LBA) are $p = 32$, $B = 8$, which gives 16 TiB capacity; or for more efficient storage, $p = 64$, $B = 1$: 8 ZiB; for embedded systems perhaps only a $p = 16$ $B = 1$ is needed, for 32 MiB.
 	
 	
 

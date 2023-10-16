@@ -55,7 +55,7 @@
 	
 	\begin{itemize}
 		\item block: Minimum filesystem unit of data
-		\item inode: File or directory entry
+		\item unspecified: May be implementation dependent
 	\end{itemize}
 	
 	\subsection{Advantages and disadvantages}
@@ -67,12 +67,18 @@
 	\end{tabularx}
 
 	\subsection{Volume layout}
-	
-	\begin{itemize}
-		\item Superblock
-		\item Root inode
-		\item <other inodes>
-	\end{itemize}
+
+	\begin{tabular}{|l|} 
+		\hline
+		Superblock \\ 
+		\hline	
+		Root directory \\
+		\hline
+		\textless other files\textgreater \\
+		\hline
+		Free space \\
+		\hline
+	\end{tabular}
 
 	\section{Superblock}
 	
@@ -127,23 +133,71 @@
 	Where $p$ is pointer size, $B$ is block size and $L$ is LBA size.
 	
 	Some examples of reasonable configurations (assuming 512-byte LBA) are $p = 32$, $B = 8$, which gives 16 TiB capacity; or for more efficient storage, $p = 64$, $B = 1$: 8 ZiB; for embedded systems perhaps only a $p = 16$ $B = 1$ is needed, for 32 MiB.
+
+	\section{File}
 	
-	\section{inode}
-	Describes inode entry on directory
+	BRFS is a file based filesystem. Regular files and directories are both files. In the end of each file's block, lies a pointer to the next block of the file. This pointer is a linear offset of blocks
 	
-	\begin{tabular}{|l|l|l|} 
+	\begin{tabular}{|l|} 
 		\hline
-		\textbf{Size (bytes)} & \textbf{Field (Unsigned integer)} & \textbf{Value} \\ [0.5ex] 
+		Data \\
 		\hline
-		Pointer & First block &  \\ 
+		[Padding] \\
 		\hline
-		Attribute & Attributes & \\
-		\hline
-		undef & Filename (c-string) & \\
+		Next block pointer \\
 		\hline
 	\end{tabular}
 
-	\section{Root inode}
+	\subsection{Directory}
 	
+	A directory is a special file that holds file entries. There is no limit on the number of entries.
+	
+	\begin{tabular}{|l|} 
+		\hline
+		file1 \\ 
+		\hline
+		... \\
+		\hline
+		filen \\
+		\hline
+		[Padding] \\
+		\hline
+		Next block pointer \\
+		\hline
+	\end{tabular}
+
+	\subsubsection{Directory entry}
+	Describes file entry on directory
+
+	\begin{tabular}{|l|l|} 
+		\hline
+		\textbf{Type (Size)} & \textbf{Field} \\ [0.5ex] 
+		\hline
+		1 & file type \\
+		\hline
+		8 & file size \\
+		\hline
+		Attribute & Attributes \\
+		\hline
+		Pointer & First block \\
+		\hline
+		unspecified & Filename (c-string) \\
+		\hline
+	\end{tabular}
+
+	\subsubsection{File type}
+	Enumeration of possible file types on a directory, one of:
+	
+	\begin{tabular}{|l|l|} 
+		\hline
+		\textbf{Value} & \textbf{Name} \\ [0.5ex] 
+		\hline
+		0x00 & Unknown \\
+		\hline
+		0x01 & Regular file \\
+		\hline
+		0x02 & Directory \\
+		\hline
+	\end{tabular}
 
 \end{document}

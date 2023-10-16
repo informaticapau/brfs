@@ -136,7 +136,7 @@
 
 	\section{File}
 	
-	BRFS is a file based filesystem. Regular files and directories are both files. In the end of each file's block, lies a pointer to the next block of the file. This pointer is a linear offset of blocks
+	BRFS is a file based filesystem. Regular files and directories are both files. 
 	
 	\begin{tabular}{|l|} 
 		\hline
@@ -148,13 +148,32 @@
 		\hline
 	\end{tabular}
 
+	\subsection{Next block pointer}
+	In the end of each file's block, lies a pointer to the next block of the file. This pointer is a linear offset of blocks.
+	
+	Pointer number 0 is reserved to denote EOF, and pointer 1 refers to next block. Pointer space starts with 2, the block after the first block of the root directory, which coincides with the global block offset.
+	
+	\begin{tabular}{|l|l|} 
+		\hline
+		 & \textbf{Block} \\ [0.5ex] 
+		\hline
+		0 & Superblock \\
+		\hline
+		1 & Root directory \\
+		\hline
+		2 & First file \\
+		\hline
+		3 & ... \\
+		\hline
+	\end{tabular}
+
 	\subsection{Directory}
 	
 	A directory is a special file that holds file entries. There is no limit on the number of entries.
 	
 	\begin{tabular}{|l|} 
 		\hline
-		file1 \\ 
+		file0 \\ 
 		\hline
 		... \\
 		\hline
@@ -173,11 +192,9 @@
 		\hline
 		\textbf{Type (Size)} & \textbf{Field} \\ [0.5ex] 
 		\hline
-		1 & file type \\
-		\hline
 		8 & file size \\
 		\hline
-		Attribute & Attributes \\
+		26 & Attributes \\
 		\hline
 		Pointer & First block \\
 		\hline
@@ -185,18 +202,26 @@
 		\hline
 	\end{tabular}
 
-	\subsubsection{File type}
-	Enumeration of possible file types on a directory, one of:
+	\subsubsection{Attributes}
+	Following the POSIX.1-2017 standard, and inspired in some linux ext4 attributes. It takes 26 bytes.
 	
 	\begin{tabular}{|l|l|} 
 		\hline
 		\textbf{Value} & \textbf{Name} \\ [0.5ex] 
 		\hline
-		0x00 & Unknown \\
+		uint16 & mode \\
 		\hline
-		0x01 & Regular file \\
+		uint32 & uid \\
 		\hline
-		0x02 & Directory \\
+		unit32 & gid \\
+		\hline
+		uint32 & crtime \\
+		\hline
+		uint32 & atime \\
+		\hline
+		uint32 & mtime \\
+		\hline
+		uint32 & dtime \\
 		\hline
 	\end{tabular}
 

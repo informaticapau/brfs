@@ -88,9 +88,13 @@
 		\hline
 		1 & Block size in LBAs & 0-255 (+1) \\
 		\hline
-		1 & Pointer size in bits & 16, 32, or 64 \\
+		1 & Pointer size in bytes & 2, 4, or 8 \\
 		\hline
-		1 & Attribute size in bytes & 0-255 (+1) \\
+		1 & Attribute size in bytes & 0-255  \\
+		\hline
+		Pointer & Available space (RENAME) & \\
+		\hline
+		Pointer & First free block & \\
 		\hline
 		b-6 & Padding... & 0x00 \\
 		\hline	
@@ -124,6 +128,22 @@
 	
 	Some examples of reasonable configurations (assuming 512-byte LBA) are $p = 32$, $B = 8$, which gives 16 TiB capacity; or for more efficient storage, $p = 64$, $B = 1$: 8 ZiB; for embedded systems perhaps only a $p = 16$ $B = 1$ is needed, for 32 MiB.
 	
+	\section{inode}
+	Describes inode entry on directory
+	
+	\begin{tabular}{|l|l|l|} 
+		\hline
+		\textbf{Size (bytes)} & \textbf{Field (Unsigned integer)} & \textbf{Value} \\ [0.5ex] 
+		\hline
+		Pointer & First block &  \\ 
+		\hline
+		Attribute & Attributes & \\
+		\hline
+		undef & Filename (c-string) & \\
+		\hline
+	\end{tabular}
+
+	\section{Root inode}
 	
 
 \end{document}

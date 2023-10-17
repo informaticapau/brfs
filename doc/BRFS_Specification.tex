@@ -4,6 +4,7 @@
 \usepackage{vhistory}
 \usepackage{tabto}
 \usepackage{tabularx}
+\usepackage{hyperref}
 
 \pagestyle{fancy}
 
@@ -167,7 +168,7 @@
 
 	\subsection{Directory}
 	
-	A directory is a special file that holds file entries. There is no limit on the number of entries.
+	A directory is a special file that holds file entries one after another. There is no limit on the number of entries. The directory ends with a null character 0x00, following the string terminator of the last entry's file name.
 	
 	\begin{tabular}{|l|} 
 		\hline
@@ -176,6 +177,8 @@
 		... \\
 		\hline
 		filen \\
+		\hline
+		null terminator 0x00 \\
 		\hline
 		[Padding] \\
 		\hline
@@ -190,34 +193,35 @@
 		\hline
 		\textbf{Type (Size)} & \textbf{Field} \\ [0.5ex] 
 		\hline
-		8 & file size \\
+		8 & File size \\
 		\hline
 		22 & Attributes \\
 		\hline
 		Pointer & First block \\
 		\hline
-		unspecified & Filename (c-string) \\
+		unspecified & File name (null-terminated string) \\
 		\hline
 	\end{tabular}
 
 	\subsubsection{Attributes}
 	Following the POSIX.1-2017 standard, and inspired in some linux ext4 attributes. It takes 22 bytes.
+	See \href{https://ext4.wiki.kernel.org/index.php/Ext4\_Disk\_Layout\#Inode\_Table}{linux kernel} and \href{https://man7.org/linux/man-pages/man3/stat.3type.html}{man7}.
 	
-	\begin{tabular}{|l|l|} 
+	\begin{tabular}{|l|l|l|} 
 		\hline
-		\textbf{Value} & \textbf{Name} \\ [0.5ex] 
+		\textbf{Type (size)} & \textbf{Name} & \textbf{Description} \\ [0.5ex] 
 		\hline
-		uint16 & mode \\
+		uint16 & mode & File type and mode \\
 		\hline
-		uint32 & uid \\
+		uint32 & uid & User ID of owner \\
 		\hline
-		unit32 & gid \\
+		unit32 & gid & Group ID of owner \\
 		\hline
-		uint32 & crtime \\
+		uint32 & crtime & Creation time \\
 		\hline
-		uint32 & atime \\
+		uint32 & atime & Last access time \\
 		\hline
-		uint32 & mtime \\
+		uint32 & mtime & Last modification time \\
 		\hline
 	\end{tabular}
 

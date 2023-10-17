@@ -9,7 +9,7 @@
 
 %title page
 \lhead{Working Draft}
-\rhead{Revision 0.2b}
+\rhead{Revision 0.3}
 
 \title{
 	\textbf{BRFS Specification} \\
@@ -36,7 +36,7 @@
 	\begin{versionhistory}
 		\vhEntry{0.1}{}{bruneo32}{Created}
 		\vhEntry{0.2}{}{bruneo32}{Unknown}
-		\vhEntry{0.2b}{}{bruneo32, arf20}{This document}
+		\vhEntry{0.3}{}{bruneo32, arf20}{This document}
 	\end{versionhistory}
 
 	\pagebreak
@@ -95,8 +95,6 @@
 		1 & Block size in LBAs & 0-255 (+1) \\
 		\hline
 		1 & Pointer size in bytes & 2, 4, or 8 \\
-		\hline
-		1 & Attribute size in bytes & 0-255  \\
 		\hline
 		Pointer & Available space (RENAME) & \\
 		\hline
@@ -194,7 +192,7 @@
 		\hline
 		8 & file size \\
 		\hline
-		26 & Attributes \\
+		22 & Attributes \\
 		\hline
 		Pointer & First block \\
 		\hline
@@ -203,7 +201,7 @@
 	\end{tabular}
 
 	\subsubsection{Attributes}
-	Following the POSIX.1-2017 standard, and inspired in some linux ext4 attributes. It takes 26 bytes.
+	Following the POSIX.1-2017 standard, and inspired in some linux ext4 attributes. It takes 22 bytes.
 	
 	\begin{tabular}{|l|l|} 
 		\hline
@@ -220,8 +218,6 @@
 		uint32 & atime \\
 		\hline
 		uint32 & mtime \\
-		\hline
-		uint32 & dtime \\
 		\hline
 	\end{tabular}
 

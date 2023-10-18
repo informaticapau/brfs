@@ -7,6 +7,7 @@ pkg_check_modules(FUSE fuse)
 
 file (GLOB FUSE_SRC
     "brfs-fuse/brfs_fuse.c"
+    "brfs-fuse/log.c"
 )
 
 add_executable(brfs-fuse ${FUSE_SRC})

@@ -92,4 +92,4 @@ typedef struct brfs_dir_entry_64 {
     char        file_name_firstc;
 } brfs_dir_entry_64_t;
 
-#endif
+#endif /* _BRFS_H */

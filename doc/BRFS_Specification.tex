@@ -89,7 +89,7 @@
 	
 	\begin{tabular}{|l|l|l|} 
 		\hline
-		\textbf{Size (bytes)} & \textbf{Field (Unsigned integer)} & \textbf{Value} \\ [0.5ex] 
+		\textbf{Size (bytes)} & \textbf{Field} & \textbf{Value} \\ [0.5ex] 
 		\hline
 		4 & Magic number & "BRFS" 0x42524653  \\ 
 		\hline
@@ -100,6 +100,8 @@
 		Pointer & Free space pointer & \\
 		\hline
 		Pointer & First free block & \\
+		\hline
+		Directory entry & Root directory entry & \\
 		\hline
 		 & Padding... & 0x00 \\
 		\hline	
@@ -132,6 +134,10 @@
 	Where $p$ is pointer size, $B$ is block size and $L$ is LBA size.
 	
 	Some examples of reasonable configurations (assuming 512-byte LBA) are $p = 32$, $B = 8$, which gives 16 TiB capacity; or for more efficient storage, $p = 64$, $B = 1$: 8 ZiB; for embedded systems perhaps only a $p = 16$ $B = 1$ is needed, for 32 MiB.
+
+	\subsection{Root directory entry}
+	
+	It is a standalone directory entry (see section 3.2) that refers to the root directory. Here is stored the size of the root directory, attributes, beginning. The root directory has no filename, so it must be an empty null-terminated string.
 
 	\section{File}
 	
@@ -187,7 +193,7 @@
 	\end{tabular}
 
 	\subsubsection{Directory entry}
-	Describes file entry on directory
+	Describes file entry on directory. Its size is variable, and the filename null-terminator also serves as entry terminator.
 
 	\begin{tabular}{|l|l|} 
 		\hline

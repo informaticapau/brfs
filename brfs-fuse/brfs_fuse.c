@@ -97,5 +97,9 @@ main(int argc, char **argv) {
     new_argv[new_argc++] = mount_point;
     new_argv[new_argc] = NULL;
 
-    return fuse_main(new_argc, new_argv, &brfs_operations, brfs_fuse_data);
+    int fuse_ret = fuse_main(new_argc, new_argv, &brfs_operations, brfs_fuse_data);
+
+    close(brfs_fuse_data->fsfd);
+
+    return fuse_ret;
 }

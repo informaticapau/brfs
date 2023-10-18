@@ -4,7 +4,7 @@
 \usepackage{vhistory}
 \usepackage{tabto}
 \usepackage{tabularx}
-\usepackage{hyperref}
+\usepackage[hidelinks]{hyperref}
 
 \pagestyle{fancy}
 
@@ -96,6 +96,10 @@
 		1 & Block size in LBAs & 0-255 (+1) \\
 		\hline
 		1 & Pointer size in bytes & 2, 4, or 8 \\
+		\hline
+		Pointer & Total filesystem size in blocks & \\
+		\hline
+		Pointer & Free blocks count & \\
 		\hline
 		Pointer & Free space pointer & \\
 		\hline

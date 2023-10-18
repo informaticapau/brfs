@@ -21,8 +21,11 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
+#include <errno.h>
 
 #include <unistd.h>
+
 
 #define FUSE_USE_VERSION    26
 #define _FILE_OFFSET_BITS   64
@@ -30,7 +33,7 @@
 
 #include "log.h"
 
-#define BRFS_FUSE_DATA ((struct brfs_fuse_state*)fuse_get_context()->private_data)
+#define BRFS_FUSE_DATA (*((struct brfs_fuse_state*)fuse_get_context()->private_data))
 
 
 
@@ -60,30 +63,39 @@ struct fuse_operations brfs_operations = {
 };
 
 struct brfs_fuse_state {
-    char *rootdir;
+    int fsfd;
 };
 
 void
 usage() {
-    fprintf(stderr, "usage:  brfs-fuse [FUSE and mount options] mount_point\n");
+    fprintf(stderr, "usage:  brfs-fuse [FUSE and mount options] device_or_file mount_point\n");
     abort();
 }
 
 int
 main(int argc, char **argv) {
     struct brfs_fuse_state *brfs_fuse_data = malloc(sizeof(struct brfs_fuse_state));
-    
-    /* Disallow root to mount FUSE filesystems */
-    if ((getuid() == 0) || (geteuid() == 0)) {
-        fprintf(stderr, "Running BRFS as root opens unnacceptable security holes\n");
-        return 1;
-    }
 
     /* Check arguments */
-    if ((argc < 2) || (argv[argc-1][0] == '-'))
+    if ((argc < 3) || (argv[argc-1][0] == '-') || (argv[argc-2][0] == '-'))
 	    usage();
 
-    debug_log(1, "Mounting brfs on %s\n", argv[argc - 1]);
+    char *fsfile = argv[argc-2];
+    char *mount_point = argv[argc-1];
 
-    return fuse_main(argc, argv, &brfs_operations, brfs_fuse_data);
+    debug_log(1, "Mounting brfs volume at %s on %s\n", fsfile, mount_point);
+
+    brfs_fuse_data->fsfd = open(fsfile, O_RDWR); /* revise: read-only option */
+    if (brfs_fuse_data->fsfd < 0) {
+        fprintf(stderr, "Error opening file or device file %s: %s\n", fsfile, strerror(errno));
+    }
+
+    int new_argc = 0;
+    char *new_argv[100]; /* 100 max args */
+    for (int i = 0; i < argc - 2; i++)
+        new_argv[new_argc++] = argv[i];
+    new_argv[new_argc++] = mount_point;
+    new_argv[new_argc] = NULL;
+
+    return fuse_main(new_argc, new_argv, &brfs_operations, brfs_fuse_data);
 }

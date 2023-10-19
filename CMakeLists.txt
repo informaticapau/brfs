@@ -13,3 +13,9 @@ file (GLOB FUSE_SRC
 add_executable(brfs-fuse ${FUSE_SRC})
 
 target_link_libraries(brfs-fuse ${FUSE_LIBRARIES})
+
+file (GLOB MKFS_SRC
+    "brfs-mkfs/brfs_mkfs.c"
+)
+
+add_executable(mkfs.brfs ${MKFS_SRC})

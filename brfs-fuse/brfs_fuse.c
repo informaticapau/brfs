@@ -100,7 +100,7 @@ struct brfs_fuse_state {
 
 void
 usage() {
-    fprintf(stderr, "usage:  brfs-fuse [FUSE and mount options] device_or_file mount_point\n");
+    fprintf(stderr, "usage:  brfs-fuse [FUSE and mount options] device mount_point\n");
     abort();
 }
 

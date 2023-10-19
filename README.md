@@ -1,7 +1,7 @@
 # brfs
 Spec, tools and drivers for BRFS on doc
 
-## mkfs.brfs
+## brfs-mkfs
 Formatter
 
 ## brfs-fuse

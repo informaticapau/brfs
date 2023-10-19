@@ -45,8 +45,8 @@ brfs_fuse_getattr(const char *path, struct stat *st) {
 
     st->st_uid = getuid(); // The owner of the file/directory is the user who mounted the filesystem
 	st->st_gid = getgid(); // The group of the file/directory is the same as the group of the user who mounted the filesystem
-	st->st_atime = time( NULL ); // The last "a"ccess of the file/directory is right now
-	st->st_mtime = time( NULL );
+	st->st_atime = time(NULL); // The last "a"ccess of the file/directory is right now
+	st->st_mtime = time(NULL);
 
     if (strcmp(path, "/") == 0) {
 		st->st_mode = S_IFDIR | 0755;
@@ -61,16 +61,15 @@ brfs_fuse_getattr(const char *path, struct stat *st) {
     return 0;
 }
 
-int brfs_fuse_readdir(const char *path, void *buffer, fuse_fill_dir_t filler, off_t offset, struct fuse_file_info *fi) {
-    debug_log(1, "readdir(\"path\")\n", path);
+int
+brfs_fuse_readdir(const char *path, void *buffer, fuse_fill_dir_t filler, off_t offset, struct fuse_file_info *fi) {
+    debug_log(1, "readdir(\"%s\")\n", path);
 
-    filler(buffer, ".", NULL, 0); // Current Directory
-	filler(buffer, "..", NULL, 0); // Parent Directory
+    filler(buffer, ".", NULL, 0);
+	filler(buffer, "..", NULL, 0);
 
-    if ( strcmp( path, "/" ) == 0 ) // If the user is trying to show the files/directories of the root directory show the following
-	{
-		filler( buffer, "file54", NULL, 0 );
-		filler( buffer, "file349", NULL, 0 );
+    if (strcmp(path, "/" ) == 0) {
+		filler(buffer, "thisfiledoesnotexist", NULL, 0);
 	}
 
     return 0;

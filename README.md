@@ -1,13 +1,19 @@
 # brfs
 Spec, tools and drivers for BRFS on doc
 
+## doc
+BRFS Specification (LaTeX)
+
 ## brfs-mkfs
-Formatter
+Create a BRFS filesystem
+
+## brfsck
+Check BRFS filesystem 
 
 ## brfs-fuse
-FUSE (Filesystem in Userspace) driver
+BRFS FUSE driver (Filesystem in Userspace)
 
 Requires ```libfuse-dev```
 
 ## brfs-module
-Kernel filesystem driver
+BRFS kernel module driver

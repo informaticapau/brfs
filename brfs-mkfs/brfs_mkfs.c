@@ -29,6 +29,9 @@
 #include <sys/mman.h>
 
 #include "../common/brfs.h"
+#include "../brfs-fuse/log.h"
+
+const char BRFS_MAGIC_BYTES[4] = BRFS_MAGIC;
 
 
 /* x86 only */
@@ -62,34 +65,29 @@ main(int argc, char **argv) {
 
     /* Check block size */
     if (block_size_bytes & (block_size_bytes - 1)) {
-        printf("Error: Block size is not power of 2\n");
-        return -1;
+        aborterr(-1,"Error: Block size is not power of 2\n");
     }
 
     /* Check pointer size */
     if (!(pointer_bits == 16 || pointer_bits == 32 || pointer_bits == 64)) {
-        printf("Error: Pointer size is not 16, 32 or 64\n");
-        return -1;
+        aborterr(-1,"Error: Pointer size is not 16, 32 or 64\n");
     }
 
 
     int fsfd = open(fsfile, O_RDWR);
     if (fsfd < 0) {
-        fprintf(stderr, "Error opening file or device %s: %s\n", fsfile, strerror(errno));
-        return -1;
+        aborterr(-1, "Error opening file or device %s: %s\n", fsfile, strerror(errno));
     }
 
     struct stat st;
     if (fstat(fsfd, &st) < 0) {
-        fprintf(stderr, "Error stating file or device %s: %s\n", fsfile, strerror(errno));
-        return -1;
+        aborterr(-1, "Error stating file or device %s: %s\n", fsfile, strerror(errno));
     }
 
     void *mapped = NULL;
     if ((mapped = mmap(NULL, 2 * block_size_bytes, PROT_WRITE, MAP_SHARED, fsfd, 0)) == MAP_FAILED) {
-        fprintf(stderr, "Error mmapping file or device %s: %s\n", fsfile, strerror(errno));
         close(fsfd);
-        return -1;
+        aborterr(-1, "Error mmapping file or device %s: %s\n", fsfile, strerror(errno));
     }
 
     printf("Making BRFS filesystem in %s...\n", fsfile);
@@ -101,19 +99,19 @@ main(int argc, char **argv) {
 
     if (pointer_bits == 16) {
         brfs_superblock_16_t *sb = (brfs_superblock_16_t*)mapped;
-        memcpy(&sb->br_magic, "BRFS", 4);
+        memcpy(&sb->br_magic, BRFS_MAGIC_BYTES, 4);
         sb->br_block_size = ilog2(block_size_bytes) - 8;
         sb->br_ptr_size = pointer_bits / 8;
     }
     else if (pointer_bits == 32) {
         brfs_superblock_32_t *sb = (brfs_superblock_32_t*)mapped;
-        memcpy(&sb->br_magic, "BRFS", 4);
+        memcpy(&sb->br_magic, BRFS_MAGIC_BYTES, 4);
         sb->br_block_size = ilog2(block_size_bytes) - 8;
         sb->br_ptr_size = pointer_bits / 8;
     }
     else if (pointer_bits == 64) {
         brfs_superblock_64_t *sb = (brfs_superblock_64_t*)mapped;
-        memcpy(&sb->br_magic, "BRFS", 4);
+        memcpy(&sb->br_magic, BRFS_MAGIC_BYTES, 4);
         sb->br_block_size = ilog2(block_size_bytes) - 8;
         sb->br_ptr_size = pointer_bits / 8;
     }

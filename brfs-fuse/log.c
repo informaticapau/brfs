@@ -32,4 +32,12 @@ debug_log(int e, const char *fmt, ...) {
     vprintf(fmt, ap);
 }
 
+void
+aborterr(int errn, const char *fmt, ...)
+{
+    va_list ap;
+    va_start(ap, fmt);
 
+    fprintf(stderr, fmt, ap);
+    exit(errn);
+}

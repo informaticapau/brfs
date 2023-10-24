@@ -18,10 +18,16 @@
 */
 
 #include <stdio.h>
+#include <stdlib.h>
 
 #ifndef _LOG_H
 #define _LOG_H
 
 void debug_log(int e, const char *fmt, ...);
+
+/**
+ * @brief Exit the program with an specific errno, showing an error message
+ */
+void aborterr(int errn, const char *fmt, ...);
 
 #endif /* _LOG_H */

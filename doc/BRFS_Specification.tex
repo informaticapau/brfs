@@ -101,8 +101,6 @@
 		\hline
 		Pointer & Free blocks count & \\
 		\hline
-		Pointer & Free space pointer & \\
-		\hline
 		Pointer & First free block & \\
 		\hline
 		Directory entry & Root directory entry & \\
@@ -141,11 +139,14 @@
 
 	\subsection{Root directory entry}
 	
-	It is a standalone directory entry (see section 3.2) that refers to the root directory. Here is stored the size of the root directory, attributes, beginning. The root directory has no filename, so it must be an empty null-terminated string.
+	It is a standalone directory entry (see section 3.2.1) that refers to the root directory. Here is stored the size of the root directory, attributes, beginning. The fiename of the root directory is "/".
 
 	\section{File}
 	
 	BRFS is a file based filesystem. Regular files and directories are both files. 
+
+	\subsection{Next block pointer}
+	In the end of each file's block, lies a pointer to the next block of the file. This pointer is a linear offset of blocks. \\
 	
 	\begin{tabular}{|l|} 
 		\hline
@@ -155,12 +156,9 @@
 		\hline
 		Next block pointer \\
 		\hline
-	\end{tabular}
-
-	\subsection{Next block pointer}
-	In the end of each file's block, lies a pointer to the next block of the file. This pointer is a linear offset of blocks.
+	\end{tabular} \\
 	
-	Pointer number 0 is reserved to denote EOF, and pointer 1 refers to next block. Pointer space starts with 2, the block after the first block of the root directory, which coincides with the global block offset.
+	Pointer number 0 is reserved to denote EOF, and pointer 1 refers to next block. Pointer space starts with 2, the block after the first block of the root directory, which coincides with the global block offset. \\
 	
 	\begin{tabular}{|l|l|} 
 		\hline
@@ -175,6 +173,10 @@
 		3 & ... \\
 		\hline
 	\end{tabular}
+
+	\subsubsection{Freed blocks}
+
+	When deleting or shrinking files, the next block pointer must be marked with all 1s, or -1 in 2-complement, and then in the beggining of the block, a pointer to the next free block. If the block pointed by it block pointer is not -1, then this block is presumed free.
 
 	\subsection{Directory}
 	

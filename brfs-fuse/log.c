@@ -33,8 +33,7 @@ debug_log(int e, const char *fmt, ...) {
 }
 
 void
-aborterr(int errn, const char *fmt, ...)
-{
+aborterr(int errn, const char *fmt, ...) {
     va_list ap;
     va_start(ap, fmt);
 

@@ -26,8 +26,8 @@
 void debug_log(int e, const char *fmt, ...);
 
 /**
- * @brief Exit the program with an specific errno, showing an error message
+ * @brief Exit the program with an specific return code, showing an error message
  */
-void aborterr(int errn, const char *fmt, ...);
+void aborterr(int ret, const char *fmt, ...);
 
 #endif /* _LOG_H */

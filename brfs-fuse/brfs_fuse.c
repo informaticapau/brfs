@@ -43,14 +43,16 @@ int
 brfs_fuse_getattr(const char *path, struct stat *st) {
     debug_log(1, "getattr(\"%s\")\n", path);
 
-    st->st_uid = getuid(); // The owner of the file/directory is the user who mounted the filesystem
-	st->st_gid = getgid(); // The group of the file/directory is the same as the group of the user who mounted the filesystem
-	st->st_atime = time(NULL); // The last "a"ccess of the file/directory is right now
+    st->st_uid = getuid();
+	st->st_gid = getgid();
+	st->st_atime = time(NULL);
 	st->st_mtime = time(NULL);
 
     if (strcmp(path, "/") == 0) {
 		st->st_mode = S_IFDIR | 0755;
-		st->st_nlink = 2; // Why "two" hardlinks instead of "one"? The answer is here: http://unix.stackexchange.com/a/101536
+		st->st_nlink = 2;
+        /* Why "two" hardlinks instead of "one"? The answer is here:
+            http://unix.stackexchange.com/a/101536 */
 	}
 	else {
 		st->st_mode = S_IFREG | 0644;
@@ -62,7 +64,8 @@ brfs_fuse_getattr(const char *path, struct stat *st) {
 }
 
 int
-brfs_fuse_readdir(const char *path, void *buffer, fuse_fill_dir_t filler, off_t offset, struct fuse_file_info *fi) {
+brfs_fuse_readdir(const char *path, void *buffer, fuse_fill_dir_t filler,
+                  off_t offset, struct fuse_file_info *fi) {
     debug_log(1, "readdir(\"%s\")\n", path);
 
     filler(buffer, ".", NULL, 0);
@@ -76,13 +79,14 @@ brfs_fuse_readdir(const char *path, void *buffer, fuse_fill_dir_t filler, off_t 
 }
 
 int
-brfs_fuse_open(const char *path, struct fuse_file_info *) {
+brfs_fuse_open(const char *path, struct fuse_file_info *fi) {
     debug_log(1, "open(\"%s\")\n", path);
     return 0;
 }
 
 int
-brfs_fuse_read(const char *path, char *, size_t, off_t, struct fuse_file_info *) {
+brfs_fuse_read(const char *path, char *buf, size_t size, off_t offset,
+               struct fuse_file_info *fi) {
     debug_log(1, "read(\"%s\")\n", path);
     return 0;
 }
@@ -100,13 +104,15 @@ struct brfs_fuse_state {
 
 void
 usage() {
-    fprintf(stderr, "usage:  brfs-fuse [FUSE and mount options] device mount_point\n");
+    fprintf(stderr,
+        "usage:  brfs-fuse [FUSE and mount options] device mount_point\n");
     abort();
 }
 
 int
 main(int argc, char **argv) {
-    struct brfs_fuse_state *brfs_fuse_data = malloc(sizeof(struct brfs_fuse_state));
+    struct brfs_fuse_state *brfs_fuse_data
+        = malloc(sizeof(struct brfs_fuse_state));
 
     /* Check arguments */
     if ((argc < 3) || (argv[argc-1][0] == '-') || (argv[argc-2][0] == '-'))
@@ -119,7 +125,8 @@ main(int argc, char **argv) {
 
     brfs_fuse_data->fsfd = open(fsfile, O_RDWR); /* revise: read-only option */
     if (brfs_fuse_data->fsfd < 0) {
-        fprintf(stderr, "Error opening file or device file %s: %s\n", fsfile, strerror(errno));
+        fprintf(stderr, "Error opening file or device file %s: %s\n", fsfile,
+            strerror(errno));
     }
 
     int new_argc = 0;
@@ -129,7 +136,8 @@ main(int argc, char **argv) {
     new_argv[new_argc++] = mount_point;
     new_argv[new_argc] = NULL;
 
-    int fuse_ret = fuse_main(new_argc, new_argv, &brfs_operations, brfs_fuse_data);
+    int fuse_ret = fuse_main(new_argc, new_argv, &brfs_operations,
+        brfs_fuse_data);
 
     close(brfs_fuse_data->fsfd);
 

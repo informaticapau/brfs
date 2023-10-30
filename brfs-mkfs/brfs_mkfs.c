@@ -31,18 +31,14 @@
 #include "../common/brfs.h"
 #include "../brfs-fuse/log.h"
 
-const char BRFS_MAGIC_BYTES[4] = BRFS_MAGIC;
+static const char BRFS_MAGIC_BYTES[4] = BRFS_MAGIC;
 
 
-/* x86 only */
 static inline uint32_t
 ilog2(const uint32_t x) {
-  uint32_t y;
-  asm ( "\tbsr %1, %0\n"
-      : "=r"(y)
-      : "r" (x)
-  );
-  return y;
+    int i = 31u;
+    while ((!((x >> i) & 1)) && (i >= 0)) i--;
+    return i;
 }
 
 void

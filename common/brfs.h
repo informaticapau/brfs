@@ -1,4 +1,5 @@
 /*
+    BRFS
     Copyright (C) 2023 Ángel Ruiz Fernandez <arf20>
     Copyright (C) 2023 Bruno Castro García <bruneo32>
 
@@ -23,17 +24,19 @@
 
 #include <stdint.h>
 
+#define BRFS_MAGIC "BRFS"
+
 /* Superblock up to ptr_size dependent fields */
 typedef struct _brfs_superblock_base {
     char        br_magic[4];
     uint32_t    br_block_size;
-    uint8_t     br_ptr_size; 
+    uint8_t     br_ptr_size;
 } brfs_superblock_base_t;
 
 /* 16-bit pointer superblock */
 typedef struct _brfs_superblock_16 {
     char        br_magic[4];
-    uint8_t    br_block_size;
+    uint8_t     br_block_size;
     uint8_t     br_ptr_size;
     uint16_t    br_free_space;
     uint16_t    br_first_free_block;
@@ -42,7 +45,7 @@ typedef struct _brfs_superblock_16 {
 /* 32-bit pointer superblock */
 typedef struct _brfs_superblock_32 {
     char        br_magic[4];
-    uint8_t    br_block_size;
+    uint8_t     br_block_size;
     uint8_t     br_ptr_size;
     uint32_t    br_free_space;
     uint32_t    br_first_free_block;
@@ -52,7 +55,7 @@ typedef struct _brfs_superblock_32 {
 /* 64-bit pointer superblock */
 typedef struct _brfs_superblock_64 {
     char        br_magic[4];
-    uint8_t    br_block_size;
+    uint8_t     br_block_size;
     uint8_t     br_ptr_size;
     uint64_t    br_free_space;
     uint64_t    br_first_free_block;

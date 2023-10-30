@@ -55,18 +55,19 @@ main(int argc, char **argv) {
 
     if (argc < 2) {
         print_usage(argv[0]);
+        return -1;
     }
 
     char *fsfile = argv[1];
 
     /* Check block size */
     if (block_size_bytes & (block_size_bytes - 1)) {
-        aborterr(-1,"Error: Block size is not power of 2\n");
+        aborterr(-1, "Error: Block size is not power of 2\n");
     }
 
     /* Check pointer size */
     if (!(pointer_bits == 16 || pointer_bits == 32 || pointer_bits == 64)) {
-        aborterr(-1,"Error: Pointer size is not 16, 32 or 64\n");
+        aborterr(-1, "Error: Pointer size is not 16, 32 or 64\n");
     }
 
 

@@ -32,7 +32,7 @@
 #define _FILE_OFFSET_BITS   64
 #include <fuse.h>
 
-#include "log.h"
+#include "../common/log.h"
 
 #define BRFS_FUSE_DATA (*((struct brfs_fuse_state*)fuse_get_context()->private_data))
 

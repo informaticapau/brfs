@@ -29,12 +29,12 @@
 #include <sys/mman.h>
 
 #include "../common/brfs.h"
-#include "../brfs-fuse/log.h"
+#include "../common/log.h"
 
 static const char BRFS_MAGIC_BYTES[4] = BRFS_MAGIC;
 
 
-static inline uint32_t
+static uint32_t
 ilog2(const uint32_t x) {
     int i = 31u;
     while ((!((x >> i) & 1)) && (i >= 0)) i--;
@@ -42,7 +42,7 @@ ilog2(const uint32_t x) {
 }
 
 void
-print_usage(char *self) {
+print_usage(const char *self) {
     fprintf(stderr, "usage: %s device\n", self);
 }
 

@@ -74,18 +74,22 @@ main(int argc, char **argv) {
 
     int fsfd = open(fsfile, O_RDWR);
     if (fsfd < 0) {
-        aborterr(-1, "Error opening file or device %s: %s\n", fsfile, strerror(errno));
+        aborterr(-1, "Error opening file or device %s: %s\n", fsfile,
+            strerror(errno));
     }
 
     struct stat st;
     if (fstat(fsfd, &st) < 0) {
-        aborterr(-1, "Error stating file or device %s: %s\n", fsfile, strerror(errno));
+        aborterr(-1, "Error stating file or device %s: %s\n", fsfile,
+            strerror(errno));
     }
 
     void *mapped = NULL;
-    if ((mapped = mmap(NULL, 2 * block_size_bytes, PROT_WRITE, MAP_SHARED, fsfd, 0)) == MAP_FAILED) {
+    if ((mapped = mmap(NULL, 2 * block_size_bytes, PROT_WRITE, MAP_SHARED, fsfd,
+        0)) == MAP_FAILED) {
         close(fsfd);
-        aborterr(-1, "Error mmapping file or device %s: %s\n", fsfile, strerror(errno));
+        aborterr(-1, "Error mmapping file or device %s: %s\n", fsfile,
+            strerror(errno));
     }
 
     int total_blocks = st.st_size / block_size_bytes;
@@ -102,8 +106,8 @@ main(int argc, char **argv) {
     printf("Device size: %d bytes, %d blocks, %d remaining bytes\n", st.st_size,
         total_blocks, st.st_size % block_size_bytes);
 
-    time_t creation_time = time(NULL);
-    printf("Created at %d\n", creation_time);
+    uint32_t creation_time = (uint32_t)time(NULL);
+    printf("Created at %s", ctime(&creation_time));
 
     /* Write superblock */
     if (pointer_bits == 16) {

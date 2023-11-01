@@ -127,14 +127,14 @@ main(int argc, char **argv) {
     time_t creation_time = time(NULL);
     printf("Created at %d\n", (uint32_t)creation_time);
 
-    /** The size of a block, in number of subblocks of 512 bytes */
-    uint8_t block_size_512 = ilog2(block_size_bytes) - 8;
+    /** The size of a block in powers of 2, minimum 512 (2^9) */
+    uint8_t block_size_power = ilog2(block_size_bytes) - 9;
 
     /* Write superblock */
     if (pointer_bits == 16) {
         brfs_superblock_16_t *sb = (brfs_superblock_16_t *)mapped;
         memcpy(&sb->br_magic, BRFS_MAGIC_BYTES, 4);
-        sb->br_block_size  = block_size_512;
+        sb->br_block_size  = block_size_power;
         sb->br_ptr_size    = pointer_bytes;
         sb->br_fs_size     = total_blocks;
         sb->br_free_blocks = total_blocks - 2;
@@ -145,7 +145,7 @@ main(int argc, char **argv) {
     } else if (pointer_bits == 32) {
         brfs_superblock_32_t *sb = (brfs_superblock_32_t *)mapped;
         memcpy(&sb->br_magic, BRFS_MAGIC_BYTES, 4);
-        sb->br_block_size  = block_size_512;
+        sb->br_block_size  = block_size_power;
         sb->br_ptr_size    = pointer_bytes;
         sb->br_fs_size     = total_blocks;
         sb->br_free_blocks = total_blocks - 2;
@@ -156,7 +156,7 @@ main(int argc, char **argv) {
     } else if (pointer_bits == 64) {
         brfs_superblock_64_t *sb = (brfs_superblock_64_t *)mapped;
         memcpy(&sb->br_magic, BRFS_MAGIC_BYTES, 4);
-        sb->br_block_size  = block_size_512;
+        sb->br_block_size  = block_size_power;
         sb->br_ptr_size    = pointer_bytes;
         sb->br_fs_size     = total_blocks;
         sb->br_free_blocks = total_blocks - 2;

@@ -127,6 +127,9 @@ main(int argc, char **argv) {
     time_t creation_time = time(NULL);
     printf("Created at %d\n", creation_time);
 
+    /** The size of a block in powers of 2, minimum 512 (2^9) */
+    uint8_t block_size_power = ilog2(block_size_bytes) - 9;
+
     /* Write superblock */
     if (pointer_bits == 16) {
         brfs_superblock_16_t *sb = (brfs_superblock_16_t *)mapped;

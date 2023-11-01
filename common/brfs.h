@@ -66,6 +66,8 @@ typedef struct _brfs_dir_entry_64 {
     uint8_t br_block_size;                                                     \
     uint8_t br_ptr_size;
 
+#define BRFS_SUPERBLOCK_MAX_SIZE    sizeof(brfs_superblock_64_t)
+
 typedef struct _brfs_superblock_base {
     _BRFS_SUPERBLOCK_HEADER
 } brfs_superblock_base_t;

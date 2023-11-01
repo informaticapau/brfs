@@ -101,5 +101,7 @@ typedef struct _brfs_superblock_64 {
     brfs_dir_entry_64_t br_root_ent;
 } brfs_superblock_64_t;
 
+#define BRFS_SUPERBLOCK_MAX_SIZE sizeof(brfs_superblock_64_t)
+
 
 #endif /* _BRFS_H */

@@ -26,40 +26,143 @@
 
 #include <unistd.h>
 #include <sys/types.h>
-
+#include <sys/stat.h>
+#include <sys/mman.h>
+#include <time.h>
 
 #define FUSE_USE_VERSION    26
 #define _FILE_OFFSET_BITS   64
 #include <fuse.h>
 
+#include "../common/brfs.h"
 #include "../common/log.h"
 
 #define BRFS_FUSE_DATA (*((struct brfs_fuse_state*)fuse_get_context()->private_data))
 
+void *
+memdup(const void *mem, size_t size) { 
+   void *out = malloc(size);
+
+   if(out != NULL)
+       memcpy(out, mem, size);
+
+   return out;
+}
 
 
+
+int fsfd = 0;
+brfs_superblock_64_t *superblock = NULL;
+
+size_t
+brfs_sizeof_dir_entry(const brfs_dir_entry_64_t *dir_entry) {
+    return sizeof(brfs_dir_entry_64_t) + strlen(&dir_entry->br_file_name_firstc);
+}
+
+brfs_dir_entry_64_t *
+brfs_find_in_dir(const char *file, brfs_dir_entry_64_t *dir_first,
+                 size_t dir_size) {
+    brfs_dir_entry_64_t *current_dir_entry = dir_first;
+    while ((current_dir_entry - dir_first) < dir_size - sizeof(brfs_dir_entry_64_t)) {
+        if (strcmp(file, &current_dir_entry->br_file_name_firstc) == 0) {
+            return current_dir_entry;
+        }
+        current_dir_entry += brfs_sizeof_dir_entry(current_dir_entry);
+    }
+    return NULL;
+}
+
+int
+brfs_read_dir(brfs_dir_entry_64_t *dir_entry, brfs_dir_entry_64_t **dir_buffer) {
+    *dir_buffer =
+        malloc(dir_entry->br_file_size);
+    if (lseek(fsfd,
+        superblock->br_block_size * dir_entry->br_first_block,
+        SEEK_SET) < 0) {
+        debug_log(1, "brfs_read_dir: lseek: %s\n", strerror(errno));
+        free(dir_entry);
+        return -1;
+    }
+    int readed = read(fsfd, dir_buffer, dir_entry->br_file_size);
+    if (readed < 0) {
+        debug_log(1, "brfs_read_dir: read: %s\n", strerror(errno));
+        free(dir_entry);
+        return -1;
+    }
+    return readed;
+}
+
+brfs_dir_entry_64_t *
+brfs_walk_tree(const char *path) {
+    if (*path != '/') {
+        debug_log(1, "brfs_walk_tree: error: Path not absolute\n");
+        return NULL;
+    }
+    if (strlen(path) == 1) {
+        return memdup(&superblock->br_root_ent, sizeof(brfs_dir_entry_64_t));
+    }
+
+    brfs_dir_entry_64_t *prev_dir_entry = &superblock->br_root_ent;
+    brfs_dir_entry_64_t *next_file = NULL;
+
+    char *patht = strdup(path);
+    char *tok = strtok(patht, "/");
+    while (tok) {
+        /* If prev is not dir */
+        if (!S_ISDIR(prev_dir_entry->br_attributes.br_mode)) {
+            debug_log(1, "brfs_walk_tree: Token not a directory: %s\n", tok);
+            free(prev_dir_entry);
+            return NULL;
+        }
+
+        /* Read directory */
+        brfs_dir_entry_64_t *current_dir_first;
+        if (brfs_read_dir(prev_dir_entry, &current_dir_first) < 0) {
+            debug_log(1, "brfs_walk_tree: error brfs_read_dir on tok: %s\n", tok);
+            free(prev_dir_entry);
+            return NULL;
+        }
+
+        /* Find tok in directory */
+        next_file = brfs_find_in_dir(tok,
+            current_dir_first, prev_dir_entry->br_file_size);
+        if (!next_file) {
+                debug_log(1, "brfs_walk_tree: file does not exist: %s\n", path);
+                free(prev_dir_entry);
+                free(current_dir_first);
+                return NULL;
+        }
+
+        /* Propagate tok */
+        prev_dir_entry = memdup(next_file, brfs_sizeof_dir_entry(next_file));
+        tok = strtok(NULL, "/");
+
+        free(prev_dir_entry);
+        free(current_dir_first);
+    }
+
+    /* Path propagated, next_file should be our file */
+    return next_file;
+}
+
+/* ====================== FUSE OPERATIONS ======================*/
 
 int
 brfs_fuse_getattr(const char *path, struct stat *st) {
     debug_log(1, "getattr(\"%s\")\n", path);
+    brfs_dir_entry_64_t *file_entry = brfs_walk_tree(path);
+    if (!file_entry) {
+        debug_log(1, "brfs_fuse_getattr: error brfs_walk_tree: %s\n", path);
+        return -1;
+    }
 
-    st->st_uid = getuid();
-	st->st_gid = getgid();
-	st->st_atime = time(NULL);
-	st->st_mtime = time(NULL);
+    st->st_uid = file_entry->br_attributes.br_uid;
+    st->st_gid = file_entry->br_attributes.br_gid;
+    st->st_mode = file_entry->br_attributes.br_mode;
+    st->st_atime = file_entry->br_attributes.br_atime;
+    st->st_mtime = file_entry->br_attributes.br_mtime;
 
-    if (strcmp(path, "/") == 0) {
-		st->st_mode = S_IFDIR | 0755;
-		st->st_nlink = 2;
-        /* Why "two" hardlinks instead of "one"? The answer is here:
-            http://unix.stackexchange.com/a/101536 */
-	}
-	else {
-		st->st_mode = S_IFREG | 0644;
-		st->st_nlink = 1;
-		st->st_size = 1024;
-	}
-
+    free(file_entry);
     return 0;
 }
 
@@ -68,12 +171,26 @@ brfs_fuse_readdir(const char *path, void *buffer, fuse_fill_dir_t filler,
                   off_t offset, struct fuse_file_info *fi) {
     debug_log(1, "readdir(\"%s\")\n", path);
 
+    /* Find directory */
+    brfs_dir_entry_64_t *dir_entry = brfs_walk_tree(path);
+    if (!dir_entry) return -1;
+
+    /* Read directory */
+    brfs_dir_entry_64_t *dir_first;
+    if (brfs_read_dir(dir_entry, &dir_first) < 0) {
+        debug_log(1, "brfs_fuse_readdir: error brfs_read_dir on path: %s\n", path);
+        free(dir_entry);
+        return -1;
+    }
+
     filler(buffer, ".", NULL, 0);
 	filler(buffer, "..", NULL, 0);
 
-    if (strcmp(path, "/" ) == 0) {
-		filler(buffer, "thisfiledoesnotexist", NULL, 0);
-	}
+    const brfs_dir_entry_64_t *current_entry = dir_first;
+    while ((dir_first - current_entry) < dir_entry->br_file_size - sizeof(brfs_dir_entry_64_t)) {
+        filler(buffer, &current_entry->br_file_name_firstc, NULL, 0);
+        current_entry += brfs_sizeof_dir_entry(current_entry);
+    }
 
     return 0;
 }
@@ -99,7 +216,7 @@ struct fuse_operations brfs_operations = {
 };
 
 struct brfs_fuse_state {
-    int fsfd;
+    
 };
 
 void
@@ -107,6 +224,13 @@ usage() {
     fprintf(stderr,
         "usage:  brfs-fuse [FUSE and mount options] device mount_point\n");
     abort();
+}
+
+int 
+powi(int b, int e) {
+    int t = b;
+    while (e--) t *= b;
+    return t;
 }
 
 int
@@ -123,11 +247,35 @@ main(int argc, char **argv) {
 
     debug_log(1, "Mounting brfs volume at %s on %s\n", fsfile, mount_point);
 
-    brfs_fuse_data->fsfd = open(fsfile, O_RDWR); /* revise: read-only option */
-    if (brfs_fuse_data->fsfd < 0) {
+    fsfd = open(fsfile, O_RDWR); /* revise: read-only option */
+    if (fsfd < 0) {
         fprintf(stderr, "Error opening file or device file %s: %s\n", fsfile,
             strerror(errno));
     }
+
+    struct stat st;
+    if (fstat(fsfd, &st) < 0) {
+        aborterr(-1, "Error stating file or device %s: %s\n", fsfile,
+            strerror(errno));
+    }
+
+    void *mapped = NULL;
+    if ((mapped = mmap(NULL, BRFS_SUPERBLOCK_MAX_SIZE, PROT_WRITE, MAP_SHARED,
+        fsfd, 0)) == MAP_FAILED) {
+        close(fsfd);
+        aborterr(-1, "Error mmapping file or device %s: %s\n", fsfile,
+            strerror(errno));
+    }
+
+    superblock = (brfs_superblock_64_t*)mapped;
+
+
+    printf("Block size: %d\nPointer size: %d\nFS size: %d\nFree blocks: %d\nFirst free block: %d\n",
+        powi(2, 8 + superblock->br_block_size), superblock->br_ptr_size,
+        superblock->br_fs_size, superblock->br_free_blocks,
+        superblock->br_first_free);
+
+    /* FUSE main */
 
     int new_argc = 0;
     char *new_argv[100]; /* 100 max args */
@@ -139,7 +287,8 @@ main(int argc, char **argv) {
     int fuse_ret = fuse_main(new_argc, new_argv, &brfs_operations,
         brfs_fuse_data);
 
-    close(brfs_fuse_data->fsfd);
+    munmap(mapped, BRFS_SUPERBLOCK_MAX_SIZE);
+    close(fsfd);
 
     return fuse_ret;
 }

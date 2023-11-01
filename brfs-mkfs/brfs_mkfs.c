@@ -106,7 +106,7 @@ main(int argc, char **argv) {
     printf("Device size: %d bytes, %d blocks, %d remaining bytes\n", st.st_size,
         total_blocks, st.st_size % block_size_bytes);
 
-    uint32_t creation_time = (uint32_t)time(NULL);
+    time_t creation_time = time(NULL);
     printf("Created at %s", ctime(&creation_time));
 
     /* Write superblock */
@@ -125,9 +125,9 @@ main(int argc, char **argv) {
         root_ent->br_attributes.br_uid = getuid();
         root_ent->br_attributes.br_uid = getgid();
         root_ent->br_attributes.br_mode = 0755; /* (octal) */
-        root_ent->br_attributes.br_crtime = creation_time;
-        root_ent->br_attributes.br_mtime = creation_time;
-        root_ent->br_attributes.br_atime = creation_time;
+        root_ent->br_attributes.br_crtime = (uint32_t)creation_time;
+        root_ent->br_attributes.br_mtime = (uint32_t)creation_time;
+        root_ent->br_attributes.br_atime = (uint32_t)creation_time;
 
         root_ent->br_first_block = 1u;
 

@@ -35,11 +35,12 @@
 
 /** Not a very fan of this, please use it wisely */
 #define CREATE_ROOT_ENTRY(root_ent, mode, uid, gid, creation_time)             \
-    root_ent->br_file_size = block_size_bytes; /* Root start size is 1 blk */  \
+    root_ent->br_file_size =                                                   \
+        block_size_bytes; /* Root start size is 1 block */                     \
                                                                                \
     root_ent->br_attributes.br_uid    = uid;                                   \
     root_ent->br_attributes.br_gid    = gid;                                   \
-    root_ent->br_attributes.br_mode   = mode; /* (octal) */                    \
+    root_ent->br_attributes.br_mode   = S_IFDIR | mode; /* (octal) */          \
     root_ent->br_attributes.br_crtime = creation_time;                         \
     root_ent->br_attributes.br_mtime  = creation_time;                         \
     root_ent->br_attributes.br_atime  = creation_time;                         \
@@ -48,10 +49,9 @@
                                                                                \
     char *filename = (char *)&root_ent->br_file_name_firstc;                   \
     strcpy(filename, "/");                                                     \
-    ((char *)mapped)[block_size_bytes] = '\0'; // Clear entries
+    ((char *)mapped)[block_size_bytes] = '\0'; /* Empty directory */
 
-static const char     BRFS_MAGIC_BYTES[4]   = BRFS_MAGIC;
-static const uint64_t BRFS_NULL_POINTER_MAX = 0;
+static const char BRFS_MAGIC_BYTES[4] = BRFS_MAGIC;
 
 static uint32_t
 ilog2(const uint32_t x) {
@@ -167,8 +167,8 @@ main(int argc, char **argv) {
     }
 
     // Put a NULL pointer at the end of ROOT
-    memcpy((void *)(mapped + block_size_bytes * 2 - pointer_bytes),
-           (void *)&BRFS_NULL_POINTER_MAX, pointer_bytes);
+    memset((void *)(mapped + block_size_bytes * 2 - pointer_bytes), 0,
+           pointer_bytes);
 
     munmap(mapped, 2 * block_size_bytes);
     close(fsfd);

@@ -161,6 +161,8 @@ brfs_fuse_getattr(const char *path, struct stat *st) {
     st->st_mode = file_entry->br_attributes.br_mode;
     st->st_atime = file_entry->br_attributes.br_atime;
     st->st_mtime = file_entry->br_attributes.br_mtime;
+    st->st_nlink = 0;
+    st->st_ino = 0;
 
     free(file_entry);
     return 0;

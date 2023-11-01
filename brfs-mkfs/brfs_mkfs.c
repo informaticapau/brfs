@@ -28,6 +28,7 @@
 #include <sys/stat.h>
 #include <sys/mman.h>
 #include <time.h>
+#include <sys/stat.h>
 
 #include "../common/brfs.h"
 #include "../common/log.h"
@@ -124,7 +125,7 @@ main(int argc, char **argv) {
 
         root_ent->br_attributes.br_uid = getuid();
         root_ent->br_attributes.br_uid = getgid();
-        root_ent->br_attributes.br_mode = 0755; /* (octal) */
+        root_ent->br_attributes.br_mode = S_IFDIR | 0755; /* (octal) */
         root_ent->br_attributes.br_crtime = (uint32_t)creation_time;
         root_ent->br_attributes.br_mtime = (uint32_t)creation_time;
         root_ent->br_attributes.br_atime = (uint32_t)creation_time;
@@ -148,7 +149,7 @@ main(int argc, char **argv) {
 
         root_ent->br_attributes.br_uid = getuid();
         root_ent->br_attributes.br_uid = getgid();
-        root_ent->br_attributes.br_mode = 0755; /* (octal) */
+        root_ent->br_attributes.br_mode = S_IFDIR | 0755; /* (octal) */
         root_ent->br_attributes.br_crtime = creation_time;
         root_ent->br_attributes.br_mtime = creation_time;
         root_ent->br_attributes.br_atime = creation_time;
@@ -172,7 +173,7 @@ main(int argc, char **argv) {
 
         root_ent->br_attributes.br_uid = getuid();
         root_ent->br_attributes.br_uid = getgid();
-        root_ent->br_attributes.br_mode = 0755; /* (octal) */
+        root_ent->br_attributes.br_mode = S_IFDIR | 0755; /* (octal) */
         root_ent->br_attributes.br_crtime = creation_time;
         root_ent->br_attributes.br_mtime = creation_time;
         root_ent->br_attributes.br_atime = creation_time;

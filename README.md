@@ -15,5 +15,7 @@ BRFS FUSE driver (Filesystem in Userspace)
 
 Requires ```libfuse-dev```
 
+Debug mount `sudo ./brfs-fuse -d -f ../vdisk /mnt`
+
 ## brfs-module
 BRFS kernel module driver

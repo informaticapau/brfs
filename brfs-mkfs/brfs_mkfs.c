@@ -19,27 +19,45 @@
     brfs_mkfs.c: BRFS filesystem creation utility
 */
 
-#include <stdio.h>
-#include <fcntl.h>
+#include <bits/stdint-uintn.h>
 #include <errno.h>
+#include <fcntl.h>
+#include <stdio.h>
 #include <string.h>
 
-#include <unistd.h>
-#include <sys/stat.h>
 #include <sys/mman.h>
-#include <time.h>
 #include <sys/stat.h>
+#include <time.h>
+#include <unistd.h>
 
 #include "../common/brfs.h"
 #include "../common/log.h"
 
-static const char BRFS_MAGIC_BYTES[4] = BRFS_MAGIC;
+/** Not a very fan of this, please use it wisely */
+#define CREATE_ROOT_ENTRY(root_ent, mode, uid, gid, creation_time)             \
+    root_ent->br_file_size =                                                   \
+        block_size_bytes; /* Root start size is 1 block */                     \
+                                                                               \
+    root_ent->br_attributes.br_uid    = uid;                                   \
+    root_ent->br_attributes.br_gid    = gid;                                   \
+    root_ent->br_attributes.br_mode   = S_IFDIR | mode; /* (octal) */          \
+    root_ent->br_attributes.br_crtime = creation_time;                         \
+    root_ent->br_attributes.br_mtime  = creation_time;                         \
+    root_ent->br_attributes.br_atime  = creation_time;                         \
+                                                                               \
+    root_ent->br_first_block = 1u;                                             \
+                                                                               \
+    char *filename = (char *)&root_ent->br_file_name_firstc;                   \
+    strcpy(filename, "/");                                                     \
+    ((char *)mapped)[block_size_bytes] = '\0'; /* Empty directory */
 
+static const char BRFS_MAGIC_BYTES[4] = BRFS_MAGIC;
 
 static uint32_t
 ilog2(const uint32_t x) {
     int i = 31u;
-    while ((!((x >> i) & 1)) && (i >= 0)) i--;
+    while ((!((x >> i) & 1)) && (i >= 0))
+        i--;
     return i;
 }
 
@@ -51,9 +69,9 @@ print_usage(const char *self) {
 int
 main(int argc, char **argv) {
     /* Defaults */
-    int pointer_bits = 64;
-    int block_size_bytes = 4096;
-
+    int pointer_bits     = 64;
+    int pointer_bytes    = pointer_bits / 8;
+    int block_size_bytes = 512;
 
     if (argc < 2) {
         print_usage(argv[0]);
@@ -72,25 +90,24 @@ main(int argc, char **argv) {
         aborterr(-1, "Error: Pointer size is not 16, 32 or 64\n");
     }
 
-
     int fsfd = open(fsfile, O_RDWR);
     if (fsfd < 0) {
         aborterr(-1, "Error opening file or device %s: %s\n", fsfile,
-            strerror(errno));
+                 strerror(errno));
     }
 
     struct stat st;
     if (fstat(fsfd, &st) < 0) {
         aborterr(-1, "Error stating file or device %s: %s\n", fsfile,
-            strerror(errno));
+                 strerror(errno));
     }
 
     void *mapped = NULL;
     if ((mapped = mmap(NULL, 2 * block_size_bytes, PROT_WRITE, MAP_SHARED, fsfd,
-        0)) == MAP_FAILED) {
+                       0)) == MAP_FAILED) {
         close(fsfd);
         aborterr(-1, "Error mmapping file or device %s: %s\n", fsfile,
-            strerror(errno));
+                 strerror(errno));
     }
 
     int total_blocks = st.st_size / block_size_bytes;
@@ -102,91 +119,53 @@ main(int argc, char **argv) {
         aborterr(-1, "Device too small for 64-bit BRFS\n");
 
     printf("Making BRFS filesystem in %s...\n", fsfile);
-    printf("Parameters:\n\tBlock size: %d B\n\tPointer size: %d bits\n", 
-        block_size_bytes, pointer_bits);
-    printf("Device size: %d bytes, %d blocks, %d remaining bytes\n", st.st_size,
-        total_blocks, st.st_size % block_size_bytes);
+    printf("Parameters:\n\tBlock size: %d B\n\tPointer size: %d bits\n",
+           block_size_bytes, pointer_bits);
+    printf("Device size: %ld bytes, %d blocks, %ld remaining bytes\n",
+           st.st_size, total_blocks, st.st_size % block_size_bytes);
 
     time_t creation_time = time(NULL);
-    printf("Created at %s", ctime(&creation_time));
+    printf("Created at %d\n", creation_time);
 
     /* Write superblock */
     if (pointer_bits == 16) {
-        brfs_superblock_16_t *sb = (brfs_superblock_16_t*)mapped;
+        brfs_superblock_16_t *sb = (brfs_superblock_16_t *)mapped;
         memcpy(&sb->br_magic, BRFS_MAGIC_BYTES, 4);
-        sb->br_block_size = ilog2(block_size_bytes) - 8;
-        sb->br_ptr_size = pointer_bits / 8;
-        sb->br_fs_size = total_blocks;
+        sb->br_block_size  = block_size_power;
+        sb->br_ptr_size    = pointer_bytes;
+        sb->br_fs_size     = total_blocks;
         sb->br_free_blocks = total_blocks - 2;
-        sb->br_first_free = 2u;
+        sb->br_first_free  = 2u;
 
-        brfs_dir_entry_16_t *root_ent = (brfs_dir_entry_16_t*)&sb->br_root_ent;
-        root_ent->br_file_size = 0;
-
-        root_ent->br_attributes.br_uid = getuid();
-        root_ent->br_attributes.br_uid = getgid();
-        root_ent->br_attributes.br_mode = S_IFDIR | 0755; /* (octal) */
-        root_ent->br_attributes.br_crtime = (uint32_t)creation_time;
-        root_ent->br_attributes.br_mtime = (uint32_t)creation_time;
-        root_ent->br_attributes.br_atime = (uint32_t)creation_time;
-
-        root_ent->br_first_block = 1u;
-
-        char *filename = (char*)&root_ent->br_file_name_firstc;
-        strcpy(filename, "/");
-    }
-    else if (pointer_bits == 32) {
-        brfs_superblock_32_t *sb = (brfs_superblock_32_t*)mapped;
+        brfs_dir_entry_16_t *root_ent = (brfs_dir_entry_16_t *)&sb->br_root_ent;
+        CREATE_ROOT_ENTRY(root_ent, 0755, getuid(), getgid(), creation_time)
+    } else if (pointer_bits == 32) {
+        brfs_superblock_32_t *sb = (brfs_superblock_32_t *)mapped;
         memcpy(&sb->br_magic, BRFS_MAGIC_BYTES, 4);
-        sb->br_block_size = ilog2(block_size_bytes) - 8;
-        sb->br_ptr_size = pointer_bits / 8;
-        sb->br_fs_size = total_blocks;
+        sb->br_block_size  = block_size_power;
+        sb->br_ptr_size    = pointer_bytes;
+        sb->br_fs_size     = total_blocks;
         sb->br_free_blocks = total_blocks - 2;
-        sb->br_first_free = 2u;
+        sb->br_first_free  = 2u;
 
-        brfs_dir_entry_32_t *root_ent = (brfs_dir_entry_32_t*)&sb->br_root_ent;
-        root_ent->br_file_size = 0;
-
-        root_ent->br_attributes.br_uid = getuid();
-        root_ent->br_attributes.br_uid = getgid();
-        root_ent->br_attributes.br_mode = S_IFDIR | 0755; /* (octal) */
-        root_ent->br_attributes.br_crtime = creation_time;
-        root_ent->br_attributes.br_mtime = creation_time;
-        root_ent->br_attributes.br_atime = creation_time;
-
-        root_ent->br_first_block = 1u;
-
-        char *filename = (char*)&root_ent->br_file_name_firstc;
-        strcpy(filename, "/");
-    }
-    else if (pointer_bits == 64) {
-        brfs_superblock_64_t *sb = (brfs_superblock_64_t*)mapped;
+        brfs_dir_entry_32_t *root_ent = (brfs_dir_entry_32_t *)&sb->br_root_ent;
+        CREATE_ROOT_ENTRY(root_ent, 0755, getuid(), getgid(), creation_time)
+    } else if (pointer_bits == 64) {
+        brfs_superblock_64_t *sb = (brfs_superblock_64_t *)mapped;
         memcpy(&sb->br_magic, BRFS_MAGIC_BYTES, 4);
-        sb->br_block_size = ilog2(block_size_bytes) - 8;
-        sb->br_ptr_size = pointer_bits / 8;
-        sb->br_fs_size = total_blocks;
+        sb->br_block_size  = block_size_power;
+        sb->br_ptr_size    = pointer_bytes;
+        sb->br_fs_size     = total_blocks;
         sb->br_free_blocks = total_blocks - 2;
-        sb->br_first_free = 2u;
+        sb->br_first_free  = 2u;
 
-        brfs_dir_entry_64_t *root_ent = (brfs_dir_entry_64_t*)&sb->br_root_ent;
-        root_ent->br_file_size = 0;
-
-        root_ent->br_attributes.br_uid = getuid();
-        root_ent->br_attributes.br_uid = getgid();
-        root_ent->br_attributes.br_mode = S_IFDIR | 0755; /* (octal) */
-        root_ent->br_attributes.br_crtime = creation_time;
-        root_ent->br_attributes.br_mtime = creation_time;
-        root_ent->br_attributes.br_atime = creation_time;
-
-        root_ent->br_first_block = 1u;
-
-        char *filename = (char*)&root_ent->br_file_name_firstc;
-        strcpy(filename, "/");
+        brfs_dir_entry_64_t *root_ent = (brfs_dir_entry_64_t *)&sb->br_root_ent;
+        CREATE_ROOT_ENTRY(root_ent, 0755, getuid(), getgid(), creation_time)
     }
 
-    /* Write root directory */
-    ((char*)mapped)[block_size_bytes] = '\0';
-    
+    // Put a NULL pointer at the end of ROOT
+    memset((void *)(mapped + block_size_bytes * 2 - pointer_bytes), 0,
+           pointer_bytes);
 
     munmap(mapped, 2 * block_size_bytes);
     close(fsfd);

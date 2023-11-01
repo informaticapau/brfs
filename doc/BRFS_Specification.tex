@@ -29,7 +29,7 @@
 
 	\maketitle
 	\thispagestyle{fancy}
-	
+
 	\begin{abstract}
 		This specification document describes the BRFS filesystem structure used to store data on storage devices. This provides a standard common description of the filesystem for developers to implement freely.
 	\end{abstract}
@@ -41,26 +41,26 @@
 	\end{versionhistory}
 
 	\pagebreak
-	
+
 	\tableofcontents
 	\pagebreak
-	
+
 	\section{Introduction}
 	\subsection{Scope}
-	
+
 	This document defines the Bruno Filesystem. As a filesystem it provides a way of structuring data in a block-based (i.e. LBA) storage device. It is meant for embedded systems where a complex filesystem is not needed, this is not a replacement for any modern desktop filesystem such as ext4, because it lacks basic features of journaling. Although BRFS is able to address large volumes, it is not recommended.
-	
+
 	\subsection{Definitions}
-	
+
 	Key words will be referred to with a \texttt{monospace font}.
-	
+
 	\begin{itemize}
 		\item block: Minimum filesystem unit of data
 		\item unspecified: May be implementation dependent
 	\end{itemize}
-	
+
 	\subsection{Advantages and disadvantages}
-	
+
 	\begin{tabularx}{\textwidth}{X|X}
 		\textbf{Advantages} & \textbf{Disadvantages} \\
 		\hline
@@ -69,10 +69,10 @@
 
 	\subsection{Volume layout}
 
-	\begin{tabular}{|l|} 
+	\begin{tabular}{|l|}
 		\hline
-		Superblock \\ 
-		\hline	
+		Superblock \\
+		\hline
 		Root directory \\
 		\hline
 		\textless other files\textgreater \\
@@ -82,18 +82,18 @@
 	\end{tabular}
 
 	\section{Superblock}
-	
+
 	The superblock records properties of the enclosed filesystem, such as the block size, pointer size and attribute size. It is 1 block in size. The remaining block will be padded with zeroes.
-	
+
 	\subsection{Superblock layout}
-	
-	\begin{tabular}{|l|l|l|} 
+
+	\begin{tabular}{|l|l|l|}
 		\hline
-		\textbf{Size (bytes)} & \textbf{Field} & \textbf{Value} \\ [0.5ex] 
+		\textbf{Size (bytes)} & \textbf{Field} & \textbf{Value} \\ [0.5ex]
 		\hline
-		4 & Magic number & "BRFS" 0x42524653  \\ 
+		4 & Magic number & "BRFS" 0x42524653  \\
 		\hline
-		1 & Block size in power of 2 & $ \textrm{bytes} = 2^{8 + \textrm{this}}$ \\
+		1 & Block size in power of 2 & $ \textrm{bytes} = 2^{9 + \textrm{this}}$ \\
 		\hline
 		1 & Pointer size in bytes & 2, 4, or 8 \\
 		\hline
@@ -106,23 +106,23 @@
 		Directory entry & Root directory entry & \\
 		\hline
 		 & Padding... & 0x00 \\
-		\hline	
+		\hline
 	\end{tabular}
 
 	\subsection{Theoretical limits}
-	
-	\begin{tabular}{|l|l|} 
+
+	\begin{tabular}{|l|l|}
 		\hline
-		\textbf{Property} & \textbf{Limit} \\ [0.5ex] 
+		\textbf{Property} & \textbf{Limit} \\ [0.5ex]
 		\hline
-		Block size & 256 \\ 
+		Block size & 256 \\
 		\hline
 		Pointer size & 64 \\
 		\hline
 		Attribute size & 256 \\
 		\hline
 		Addressable blocks & $2^{64}$ \\
-		\hline	
+		\hline
 		Addressable LBAs & $256 \cdot 2^{64}$ \\
 		\hline
 		Absolute maximum capacity (512-byte LBA) & $512 \cdot 256 \cdot 2^{64} \approx $ 2 YiB \\
@@ -134,21 +134,21 @@
 		C = L \cdot B \cdot 2^p
 	\end{equation}
 	Where $p$ is pointer size, $B$ is block size and $L$ is LBA size.
-	
+
 	Some examples of reasonable configurations (assuming 512-byte LBA) are $p = 32$, $B = 8$, which gives 16 TiB capacity; or for more efficient storage, $p = 64$, $B = 1$: 8 ZiB; for embedded systems perhaps only a $p = 16$ $B = 1$ is needed, for 32 MiB.
 
 	\subsection{Root directory entry}
-	
+
 	It is a standalone directory entry (see section 3.2.1) that refers to the root directory. Here is stored the size of the root directory, attributes, beginning. The filename of the root directory is "/".
 
 	\section{File}
-	
-	BRFS is a file based filesystem. Regular files and directories are both files. 
+
+	BRFS is a file based filesystem. Regular files and directories are both files.
 
 	\subsection{Next block pointer}
 	In the end of each file's block, lies a pointer to the next block of the file. This pointer is a linear offset of blocks. \\
-	
-	\begin{tabular}{|l|} 
+
+	\begin{tabular}{|l|}
 		\hline
 		Data \\
 		\hline
@@ -157,12 +157,12 @@
 		Next block pointer \\
 		\hline
 	\end{tabular} \\
-	
+
 	Pointer number 0 is reserved to denote EOF, and pointer 1 refers to next block. Pointer space starts with 2, the block after the first block of the root directory, which coincides with the global block offset. \\
-	
-	\begin{tabular}{|l|l|} 
+
+	\begin{tabular}{|l|l|}
 		\hline
-		 & \textbf{Block} \\ [0.5ex] 
+		 & \textbf{Block} \\ [0.5ex]
 		\hline
 		0 & Superblock \\
 		\hline
@@ -177,8 +177,8 @@
 	\subsubsection{Freed blocks}
 
 	When deleting or shrinking files, the next block pointer must be marked with all 1s, or -1 in 2-complement, and then in the beginning of the block, a pointer to the next free block. If the pointer of the block pointed by it is not -1, then this block is presumed free. \\
-	
-	\begin{tabular}{|l|} 
+
+	\begin{tabular}{|l|}
 		\hline
 		Next free block pointer \\
 		\hline
@@ -189,12 +189,12 @@
 	\end{tabular} \\
 
 	\subsection{Directory}
-	
+
 	A directory is a special file that holds file entries one after another. There is no limit on the number of entries. The directory ends with a null character 0x00, following the string terminator of the last entry's file name. \\
-	
-	\begin{tabular}{|l|} 
+
+	\begin{tabular}{|l|}
 		\hline
-		file0 \\ 
+		file0 \\
 		\hline
 		... \\
 		\hline
@@ -211,9 +211,9 @@
 	\subsubsection{Directory entry}
 	Describes file entry on directory. Its size is variable, and the filename null-terminator also serves as entry terminator. \\
 
-	\begin{tabular}{|l|l|} 
+	\begin{tabular}{|l|l|}
 		\hline
-		\textbf{Type (Size)} & \textbf{Field} \\ [0.5ex] 
+		\textbf{Type (Size)} & \textbf{Field} \\ [0.5ex]
 		\hline
 		8 & File size \\
 		\hline
@@ -228,10 +228,10 @@
 	\subsubsection{Attributes}
 	Following the POSIX.1-2017 standard, and inspired in some linux ext4 attributes. It takes 22 bytes.
 	See \href{https://ext4.wiki.kernel.org/index.php/Ext4\_Disk\_Layout\#Inode\_Table}{linux kernel} and \href{https://man7.org/linux/man-pages/man3/stat.3type.html}{man7}. \\
-	
-	\begin{tabular}{|l|l|l|} 
+
+	\begin{tabular}{|l|l|l|}
 		\hline
-		\textbf{Type (size)} & \textbf{Name} & \textbf{Description} \\ [0.5ex] 
+		\textbf{Type (size)} & \textbf{Name} & \textbf{Description} \\ [0.5ex]
 		\hline
 		uint16 & mode & File type and mode \\
 		\hline

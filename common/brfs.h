@@ -28,12 +28,12 @@
 
 /* Directory entry attributes */
 typedef struct _brfs_attr {
-    uint16_t    br_mode;
-    uint32_t    br_uid;
-    uint32_t    br_gid;
-    uint32_t    br_crtime;
-    uint32_t    br_atime;
-    uint32_t    br_mtime;
+    uint16_t br_mode;
+    uint32_t br_uid;
+    uint32_t br_gid;
+    uint32_t br_crtime;
+    uint32_t br_atime;
+    uint32_t br_mtime;
 } brfs_attr_t;
 
 /* 16-bit pointer directory entry */
@@ -60,19 +60,19 @@ typedef struct _brfs_dir_entry_64 {
     char        br_file_name_firstc;
 } brfs_dir_entry_64_t;
 
-
 /* Superblock up to ptr_size dependent fields */
+#define _BRFS_SUPERBLOCK_HEADER                                                \
+    char    br_magic[4];                                                       \
+    uint8_t br_block_size;                                                     \
+    uint8_t br_ptr_size;
+
 typedef struct _brfs_superblock_base {
-    char        br_magic[4];
-    uint32_t    br_block_size;
-    uint8_t     br_ptr_size;
+    _BRFS_SUPERBLOCK_HEADER
 } brfs_superblock_base_t;
 
 /* 16-bit pointer superblock */
 typedef struct _brfs_superblock_16 {
-    char                br_magic[4];
-    uint8_t             br_block_size;
-    uint8_t             br_ptr_size;
+    _BRFS_SUPERBLOCK_HEADER
     uint16_t            br_fs_size;
     uint16_t            br_free_blocks;
     uint16_t            br_first_free;
@@ -81,9 +81,7 @@ typedef struct _brfs_superblock_16 {
 
 /* 32-bit pointer superblock */
 typedef struct _brfs_superblock_32 {
-    char                br_magic[4];
-    uint8_t             br_block_size;
-    uint8_t             br_ptr_size;
+    _BRFS_SUPERBLOCK_HEADER
     uint32_t            br_fs_size;
     uint32_t            br_free_blocks;
     uint32_t            br_first_free;
@@ -92,16 +90,11 @@ typedef struct _brfs_superblock_32 {
 
 /* 64-bit pointer superblock */
 typedef struct _brfs_superblock_64 {
-    char                br_magic[4];
-    uint8_t             br_block_size;
-    uint8_t             br_ptr_size;
+    _BRFS_SUPERBLOCK_HEADER
     uint64_t            br_fs_size;
     uint64_t            br_free_blocks;
     uint64_t            br_first_free;
     brfs_dir_entry_64_t br_root_ent;
 } brfs_superblock_64_t;
-
-#define BRFS_SUPERBLOCK_MAX_SIZE sizeof(brfs_superblock_64_t)
-
 
 #endif /* _BRFS_H */

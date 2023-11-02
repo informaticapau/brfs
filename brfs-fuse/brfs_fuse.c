@@ -52,7 +52,8 @@ memdup(const void *mem, size_t size) {
 
 int
 powi(int b, int e) {
-    if (e == 0) return 1;
+    if (e == 0)
+        return 1;
 
     int t = b;
     e--;
@@ -86,7 +87,7 @@ brfs_find_in_dir(const char *file, brfs_dir_entry_64_t *dir_first,
 }
 
 int
-brfs_read_dir(brfs_dir_entry_64_t  *dir_entry,
+brfs_read_dir(brfs_dir_entry_64_t * dir_entry,
               brfs_dir_entry_64_t **dir_buffer) {
     *dir_buffer = malloc(dir_entry->br_file_size);
     if (lseek(fsfd, block_size_bytes * dir_entry->br_first_block, SEEK_SET) <
@@ -170,6 +171,12 @@ brfs_walk_tree(const char *path, brfs_dir_entry_64_t **entry) {
 
 /* ====================== FUSE OPERATIONS ======================*/
 
+/** Get file attributes.
+ *
+ * Similar to stat().  The 'st_dev' and 'st_blksize' fields are
+ * ignored.	 The 'st_ino' field is ignored except if the 'use_ino'
+ * mount option is given.
+ */
 int
 brfs_fuse_getattr(const char *path, struct stat *st) {
     debug_log(1, "getattr(\"%s\")\n", path);
@@ -193,6 +200,27 @@ brfs_fuse_getattr(const char *path, struct stat *st) {
     return 0;
 }
 
+/** Read directory
+ *
+ * This supersedes the old getdir() interface.  New applications
+ * should use this.
+ *
+ * The filesystem may choose between two modes of operation:
+ *
+ * 1) The readdir implementation ignores the offset parameter, and
+ * passes zero to the filler function's offset.  The filler
+ * function will not return '1' (unless an error happens), so the
+ * whole directory is read in a single readdir operation.  This
+ * works just like the old getdir() method.
+ *
+ * 2) The readdir implementation keeps track of the offsets of the
+ * directory entries.  It uses the offset parameter and always
+ * passes non-zero offset to the filler function.  When the buffer
+ * is full (or an error happens) the filler function will return
+ * '1'.
+ *
+ * Introduced in version 2.3
+ */
 int
 brfs_fuse_readdir(const char *path, void *buffer, fuse_fill_dir_t filler,
                   off_t offset, struct fuse_file_info *fi) {
@@ -230,12 +258,40 @@ brfs_fuse_readdir(const char *path, void *buffer, fuse_fill_dir_t filler,
     return 0;
 }
 
+/** File open operation
+ *
+ * No creation (O_CREAT, O_EXCL) and by default also no
+ * truncation (O_TRUNC) flags will be passed to open(). If an
+ * application specifies O_TRUNC, fuse first calls truncate()
+ * and then open(). Only if 'atomic_o_trunc' has been
+ * specified and kernel version is 2.6.24 or later, O_TRUNC is
+ * passed on to open.
+ *
+ * Unless the 'default_permissions' mount option is given,
+ * open should check if the operation is permitted for the
+ * given flags. Optionally open may also return an arbitrary
+ * filehandle in the fuse_file_info structure, which will be
+ * passed to all file operations.
+ *
+ * Changed in version 2.2
+ */
 int
 brfs_fuse_open(const char *path, struct fuse_file_info *fi) {
     debug_log(1, "open(\"%s\")\n", path);
     return 0;
 }
 
+/** Read data from an open file
+ *
+ * Read should return exactly the number of bytes requested except
+ * on EOF or error, otherwise the rest of the data will be
+ * substituted with zeroes.	 An exception to this is when the
+ * 'direct_io' mount option is specified, in which case the return
+ * value of the read system call will reflect the return value of
+ * this operation.
+ *
+ * Changed in version 2.2
+ */
 int
 brfs_fuse_read(const char *path, char *buf, size_t size, off_t offset,
                struct fuse_file_info *fi) {
@@ -243,10 +299,12 @@ brfs_fuse_read(const char *path, char *buf, size_t size, off_t offset,
     return 0;
 }
 
-struct fuse_operations brfs_operations = {.getattr = brfs_fuse_getattr,
-                                          .readdir = brfs_fuse_readdir,
-                                          .open    = brfs_fuse_open,
-                                          .read    = brfs_fuse_read};
+struct fuse_operations brfs_operations = {
+    .getattr = brfs_fuse_getattr,
+    .readdir = brfs_fuse_readdir,
+    .open    = brfs_fuse_open,
+    .read    = brfs_fuse_read,
+};
 
 struct brfs_fuse_state {};
 
@@ -294,8 +352,8 @@ main(int argc, char **argv) {
     superblock       = (brfs_superblock_64_t *)mapped;
     block_size_bytes = powi(2, 9 + superblock->br_block_size);
 
-    printf("Block size: %d\nPointer size: %d\nFS size: %d\nFree blocks: "
-           "%d\nFirst free block: %d\n",
+    printf("Block size: %ld\nPointer size: %d\nFS size: %ld\nFree blocks: "
+           "%ld\nFirst free block: %ld\n",
            block_size_bytes, superblock->br_ptr_size, superblock->br_fs_size,
            superblock->br_free_blocks, superblock->br_first_free);
 

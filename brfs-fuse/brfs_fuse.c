@@ -123,7 +123,8 @@ brfs_walk_tree(const char *path) {
         /* If prev is not dir */
         if (!S_ISDIR(prev_dir_entry->br_attributes.br_mode)) {
             debug_log(1, "brfs_walk_tree: Token not a directory: %s\n", tok);
-            free(prev_dir_entry);
+            if (prev_dir_entry != &superblock->br_root_ent)
+                free(prev_dir_entry);
             return NULL;
         }
 
@@ -132,7 +133,8 @@ brfs_walk_tree(const char *path) {
         if (brfs_read_dir(prev_dir_entry, &current_dir_first) < 0) {
             debug_log(1, "brfs_walk_tree: error brfs_read_dir on tok: %s\n",
                       tok);
-            free(prev_dir_entry);
+            if (prev_dir_entry != &superblock->br_root_ent)
+                free(prev_dir_entry);
             return NULL;
         }
 
@@ -141,7 +143,8 @@ brfs_walk_tree(const char *path) {
                                      prev_dir_entry->br_file_size);
         if (!next_file) {
             debug_log(1, "brfs_walk_tree: file does not exist: %s\n", path);
-            free(prev_dir_entry);
+            if (prev_dir_entry != &superblock->br_root_ent)
+                free(prev_dir_entry);
             free(current_dir_first);
             return NULL;
         }
@@ -150,7 +153,8 @@ brfs_walk_tree(const char *path) {
         prev_dir_entry = memdup(next_file, brfs_sizeof_dir_entry(next_file));
         tok            = strtok(NULL, "/");
 
-        free(prev_dir_entry);
+        if (prev_dir_entry != &superblock->br_root_ent)
+                free(prev_dir_entry);
         free(current_dir_first);
     }
 

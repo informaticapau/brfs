@@ -19,7 +19,6 @@
     brfs_mkfs.c: BRFS filesystem creation utility
 */
 
-#include <bits/stdint-uintn.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>

@@ -50,8 +50,18 @@ memdup(const void *mem, size_t size) {
     return out;
 }
 
-int                   fsfd       = 0;
-brfs_superblock_64_t *superblock = NULL;
+int
+powi(int b, int e) {
+    int t = b;
+    e--;
+    while (e--)
+        t *= b;
+    return t;
+}
+
+int                   fsfd             = 0;
+brfs_superblock_64_t *superblock       = NULL;
+size_t                block_size_bytes = 0;
 
 size_t
 brfs_sizeof_dir_entry(const brfs_dir_entry_64_t *dir_entry) {
@@ -77,13 +87,13 @@ int
 brfs_read_dir(brfs_dir_entry_64_t  *dir_entry,
               brfs_dir_entry_64_t **dir_buffer) {
     *dir_buffer = malloc(dir_entry->br_file_size);
-    if (lseek(fsfd, superblock->br_block_size * dir_entry->br_first_block,
-              SEEK_SET) < 0) {
+    if (lseek(fsfd, block_size_bytes * dir_entry->br_first_block, SEEK_SET) <
+        0) {
         debug_log(1, "brfs_read_dir: lseek: %s\n", strerror(errno));
         free(dir_entry);
         return -1;
     }
-    int readed = read(fsfd, dir_buffer, dir_entry->br_file_size);
+    int readed = read(fsfd, *dir_buffer, dir_entry->br_file_size);
     if (readed < 0) {
         debug_log(1, "brfs_read_dir: read: %s\n", strerror(errno));
         free(dir_entry);
@@ -230,14 +240,6 @@ usage() {
 }
 
 int
-powi(int b, int e) {
-    int t = b;
-    while (e--)
-        t *= b;
-    return t;
-}
-
-int
 main(int argc, char **argv) {
     struct brfs_fuse_state *brfs_fuse_data =
         malloc(sizeof(struct brfs_fuse_state));
@@ -271,13 +273,13 @@ main(int argc, char **argv) {
                  strerror(errno));
     }
 
-    superblock = (brfs_superblock_64_t *)mapped;
+    superblock       = (brfs_superblock_64_t *)mapped;
+    block_size_bytes = powi(2, 9 + superblock->br_block_size);
 
     printf("Block size: %d\nPointer size: %d\nFS size: %d\nFree blocks: "
            "%d\nFirst free block: %d\n",
-           powi(2, 8 + superblock->br_block_size), superblock->br_ptr_size,
-           superblock->br_fs_size, superblock->br_free_blocks,
-           superblock->br_first_free);
+           block_size_bytes, superblock->br_ptr_size, superblock->br_fs_size,
+           superblock->br_free_blocks, superblock->br_first_free);
 
     /* FUSE main */
 

@@ -124,7 +124,7 @@ main(int argc, char **argv) {
            st.st_size, total_blocks, st.st_size % block_size_bytes);
 
     time_t creation_time = time(NULL);
-    printf("Created at %d\n", creation_time);
+    printf("Created at %s\n", ctime(&creation_time));
 
     /** The size of a block in powers of 2, minimum 512 (2^9) */
     uint8_t block_size_power = ilog2(block_size_bytes) - 9;

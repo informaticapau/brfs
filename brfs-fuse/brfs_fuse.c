@@ -52,6 +52,8 @@ memdup(const void *mem, size_t size) {
 
 int
 powi(int b, int e) {
+    if (e == 0) return 1;
+
     int t = b;
     e--;
     while (e--)

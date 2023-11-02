@@ -104,14 +104,16 @@ brfs_read_dir(brfs_dir_entry_64_t  *dir_entry,
     return readed;
 }
 
-brfs_dir_entry_64_t *
-brfs_walk_tree(const char *path) {
+int
+brfs_walk_tree(const char *path, brfs_dir_entry_64_t **entry) {
     if (*path != '/') {
         debug_log(1, "brfs_walk_tree: error: Path not absolute\n");
-        return NULL;
+        *entry = NULL;
+        return -EIO;
     }
     if (strlen(path) == 1) {
-        return memdup(&superblock->br_root_ent, sizeof(brfs_dir_entry_64_t));
+        *entry = memdup(&superblock->br_root_ent, sizeof(brfs_dir_entry_64_t));
+        return 0;
     }
 
     brfs_dir_entry_64_t *prev_dir_entry = &superblock->br_root_ent;
@@ -125,7 +127,8 @@ brfs_walk_tree(const char *path) {
             debug_log(1, "brfs_walk_tree: Token not a directory: %s\n", tok);
             if (prev_dir_entry != &superblock->br_root_ent)
                 free(prev_dir_entry);
-            return NULL;
+            *entry = NULL;
+            return -ENOTDIR;
         }
 
         /* Read directory */
@@ -135,7 +138,8 @@ brfs_walk_tree(const char *path) {
                       tok);
             if (prev_dir_entry != &superblock->br_root_ent)
                 free(prev_dir_entry);
-            return NULL;
+            *entry = NULL;
+            return -EIO;
         }
 
         /* Find tok in directory */
@@ -146,7 +150,8 @@ brfs_walk_tree(const char *path) {
             if (prev_dir_entry != &superblock->br_root_ent)
                 free(prev_dir_entry);
             free(current_dir_first);
-            return NULL;
+            *entry = NULL;
+            return -ENOENT;
         }
 
         /* Propagate tok */
@@ -154,12 +159,13 @@ brfs_walk_tree(const char *path) {
         tok            = strtok(NULL, "/");
 
         if (prev_dir_entry != &superblock->br_root_ent)
-                free(prev_dir_entry);
+            free(prev_dir_entry);
         free(current_dir_first);
     }
 
     /* Path propagated, next_file should be our file */
-    return next_file;
+    *entry = next_file;
+    return 0;
 }
 
 /* ====================== FUSE OPERATIONS ======================*/
@@ -167,10 +173,12 @@ brfs_walk_tree(const char *path) {
 int
 brfs_fuse_getattr(const char *path, struct stat *st) {
     debug_log(1, "getattr(\"%s\")\n", path);
-    brfs_dir_entry_64_t *file_entry = brfs_walk_tree(path);
-    if (!file_entry) {
-        debug_log(1, "brfs_fuse_getattr: error brfs_walk_tree: %s\n", path);
-        return -1;
+    brfs_dir_entry_64_t *file_entry = NULL;
+    int err = 0;
+    if ((err = brfs_walk_tree(path, &file_entry)) < 0) {
+        debug_log(1, "brfs_fuse_getattr: error brfs_walk_tree(\"%s\"): %s\n",
+            path, strerror(err));
+        return err;
     }
 
     st->st_uid   = file_entry->br_attributes.br_uid;
@@ -191,9 +199,13 @@ brfs_fuse_readdir(const char *path, void *buffer, fuse_fill_dir_t filler,
     debug_log(1, "readdir(\"%s\")\n", path);
 
     /* Find directory */
-    brfs_dir_entry_64_t *dir_entry = brfs_walk_tree(path);
-    if (!dir_entry)
-        return -1;
+    brfs_dir_entry_64_t *dir_entry = NULL;
+    int err = 0;
+    if ((err = brfs_walk_tree(path, &dir_entry)) < 0) {
+        debug_log(1, "brfs_fuse_readdir: error brfs_walk_tree(\"%s\"): %s\n",
+            path, strerror(err));
+        return err;
+    }
 
     /* Read directory */
     brfs_dir_entry_64_t *dir_first;

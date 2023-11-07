@@ -48,7 +48,9 @@
                                                                                \
     char *filename = (char *)&root_ent->br_file_name_firstc;                   \
     strcpy(filename, "/");                                                     \
-    ((char *)mapped)[block_size_bytes] = '\0'; /* Empty directory */
+                                                                               \
+    /* Empty directory (all entries should be zero, this also handles ptr) */  \
+    memset((void *)(mapped + block_size_bytes), 0, block_size_bytes);
 
 static const char BRFS_MAGIC_BYTES[4] = BRFS_MAGIC;
 
@@ -102,7 +104,7 @@ main(int argc, char **argv) {
     }
 
     void *mapped = NULL;
-    if ((mapped = mmap(NULL, 2 * block_size_bytes, PROT_WRITE, MAP_SHARED, fsfd,
+    if ((mapped = mmap(NULL, 3 * block_size_bytes, PROT_WRITE, MAP_SHARED, fsfd,
                        0)) == MAP_FAILED) {
         close(fsfd);
         aborterr(-1, "Error mmapping file or device %s: %s\n", fsfile,
@@ -165,8 +167,11 @@ main(int argc, char **argv) {
         CREATE_ROOT_ENTRY(root_ent, 0755, getuid(), getgid(), creation_time)
     }
 
-    // Put a NULL pointer at the end of ROOT
-    memset((void *)(mapped + block_size_bytes * 2 - pointer_bytes), 0,
+    // Format the next block.
+    // This block is pointed by (sb->br_first_free), so it means is removed,
+    // Since this is the last block, and not a erased block, requires to be
+    // next_pointer = 0
+    memset((void *)(mapped + block_size_bytes * 3 - pointer_bytes), 0,
            pointer_bytes);
 
     munmap(mapped, 2 * block_size_bytes);

@@ -34,8 +34,7 @@
 
 /** Not a very fan of this, please use it wisely */
 #define CREATE_ROOT_ENTRY(root_ent, mode, uid, gid, creation_time)             \
-    root_ent->br_file_size =                                                   \
-        block_size_bytes; /* Root start size is 1 block */                     \
+    root_ent->br_file_size = 0; /* Folder will grow with entries */            \
                                                                                \
     root_ent->br_attributes.br_uid    = uid;                                   \
     root_ent->br_attributes.br_gid    = gid;                                   \

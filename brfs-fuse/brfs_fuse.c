@@ -79,12 +79,13 @@ brfs_sizeof_dir_entry(const brfs_dir_entry_64_t *dir_entry) {
            strlen(&dir_entry->br_file_name_firstc);
 }
 
+/** Return how many blocks will it take to fill with n bytes of data */
 #define CALC_N_BLOCKS(n) ((n / (block_data_size_bytes + 1)) + 1)
 
 ssize_t
-brfs_read_block(size_t block_idx, void *buf, size_t n) {
-    if (lseek(fsfd, block_size_bytes * block_idx, SEEK_SET) < 0) {
-        debug_log(1, "brfs_read_block: lseek: %s\n", strerror(errno));
+brfs_read_block_offset(size_t block_idx, void *buf, size_t n, size_t offset) {
+    if (lseek(fsfd, block_size_bytes * block_idx + offset, SEEK_SET) < 0) {
+        debug_log(1, "brfs_read_block_offset: lseek: %s\n", strerror(errno));
         return -1;
     }
 
@@ -92,22 +93,64 @@ brfs_read_block(size_t block_idx, void *buf, size_t n) {
 }
 
 ssize_t
-brfs_write_block(size_t block_idx, const void *buf, size_t n) {
+brfs_read_block(size_t block_idx, void *buf, size_t n) {
+    return brfs_read_block_offset(block_idx, buf, n, 0);
+}
+
+ssize_t
+brfs_write_block_offset(size_t block_idx, const void *buf, size_t n,
+                        size_t offset) {
     if (block_idx == 0)
         return -1; /* Cannot write to protected Superblock */
 
-    if (lseek(fsfd, block_size_bytes * block_idx, SEEK_SET) < 0) {
-        debug_log(1, "brfs_write_block: lseek: %s\n", strerror(errno));
+    if (lseek(fsfd, block_size_bytes * block_idx + offset, SEEK_SET) < 0) {
+        debug_log(1, "brfs_write_block_offset: lseek: %s\n", strerror(errno));
         return -1;
     }
 
     return write(fsfd, buf, n);
 }
 
+ssize_t
+brfs_write_block(size_t block_idx, const void *buf, size_t n) {
+    return brfs_write_block_offset(block_idx, buf, n, 0);
+}
+
+int
+brfs_zero_block(size_t block_idx) {
+    if (block_idx == 0)
+        return -1; /* Cannot write to protected Superblock */
+
+    uint8_t *zeros = calloc(block_size_bytes, 1);
+    if (!zeros) {
+        debug_log(1, "brfs_zero_block: %s\n", strerror(errno));
+        return -1;
+    }
+
+    if (lseek(fsfd, block_size_bytes * block_idx, SEEK_SET) < 0) {
+        debug_log(1, "brfs_zero_block: lseek: %s\n", strerror(errno));
+        free(zeros);
+        return -1;
+    }
+
+    if (block_size_bytes != write(fsfd, zeros, block_size_bytes)) {
+        debug_log(1,
+                  "brfs_zero_block: read did not returned exactly "
+                  "block_size_bytes (%d)",
+                  block_size_bytes);
+        free(zeros);
+        return -1;
+    }
+
+    free(zeros);
+
+    return 0;
+}
+
 uint64_t
 brfs_read_block_ptr(uint64_t block_idx) {
     /* This is a ""text"" buffer for reading bytes, not the returning value */
-    unsigned char *ptr_buffer = malloc(pointer_size_bytes);
+    unsigned char ptr_buffer[pointer_size_bytes];
 
     if (lseek(fsfd, block_size_bytes * block_idx + block_data_size_bytes,
               SEEK_SET) < 0) {
@@ -133,15 +176,11 @@ brfs_read_block_ptr(uint64_t block_idx) {
     return r;
 }
 
-uint64_t
-brfs_resolve_next_ptr(uint64_t block_idx) {
-    uint64_t next_ptr = brfs_read_block_ptr(block_idx);
-    return (next_ptr == 1) ? block_idx + 1 : next_ptr;
-}
-
-/** TODO: BR1, Still not usable */
 void
 brfs_write_block_ptr(size_t block_idx, size_t next_pointer) {
+    if (block_idx == 0)
+        return; /* Cannot write to protected Superblock */
+
     if (lseek(fsfd, block_size_bytes * block_idx + block_data_size_bytes,
               SEEK_SET) < 0) {
         debug_log(1, "brfs_write_block_and_pointer: lseek: %s\n",
@@ -149,15 +188,45 @@ brfs_write_block_ptr(size_t block_idx, size_t next_pointer) {
         return;
     }
 
-    /* TODO: Pending to figure out how to do this */
     unsigned char p[pointer_size_bytes];
     for (uint8_t i = 0; i < pointer_size_bytes; i++)
-        p[i] = *(&next_pointer + i);
+        p[i] = (unsigned char)(next_pointer >> 8 * i);
 
     write(fsfd, p, sizeof(p));
 }
 
+uint64_t
+brfs_resolve_next_ptr(uint64_t block_idx) {
+    uint64_t next_ptr = brfs_read_block_ptr(block_idx);
+    return (next_ptr == 1) ? block_idx + 1 : next_ptr;
+}
+
+/**
+ * @brief properly advances `superblock->br_first_free`
+ * @return size_t `brfs_read_block_ptr(superblock->br_first_free)`
+ */
 size_t
+brfs_advance_next_ptr() {
+    size_t nextp = brfs_read_block_ptr(superblock->br_first_free);
+
+    switch (nextp) {
+        /* Means that the next block is writable
+            1: next sector is available, and handles a valid next (free) pointer
+            0: next sector is available, and requires format as 0 */
+    case 0:
+        brfs_write_block_ptr(1 + superblock->br_first_free, 0);
+    case 1:
+        superblock->br_first_free++;
+        break;
+    default:
+        superblock->br_first_free = nextp;
+        break;
+    }
+
+    return nextp;
+}
+
+ssize_t
 brfs_read(brfs_dir_entry_64_t *entry, void *buf) {
     size_t   readed    = 0;
     uint64_t block_idx = entry->br_first_block;
@@ -178,34 +247,26 @@ brfs_read(brfs_dir_entry_64_t *entry, void *buf) {
     return readed;
 }
 
-int
+ssize_t
 brfs_write(const void *buf, size_t n) {
     /* Number of blocks to write */
-    size_t n_blocks = CALC_N_BLOCKS(n);
+    ssize_t n_blocks = CALC_N_BLOCKS(n);
 
     for (size_t i = 0; i < n_blocks; i++) {
         bool   isLast = i == n_blocks - 1;
         size_t offset = (i * block_data_size_bytes);
         size_t nbytes = (isLast) ? n - offset : block_data_size_bytes;
 
-        size_t nextp = brfs_read_block_ptr(superblock->br_first_free);
+        size_t sbffp = superblock->br_first_free;
+        size_t nextp = brfs_advance_next_ptr();
 
-        brfs_write_block(superblock->br_first_free, buf + offset, nbytes);
-        if (nextp == 1 || nextp == 0) {
-            /* Means that the next block is writable
-                1: next sector is available and formatted
-                0: next sector is available and requires format as 0 */
-            brfs_write_block_ptr(superblock->br_first_free, isLast ? 0 : 1);
-            superblock->br_first_free++;
-        } else {
-            /* nextp is the backtrace to superblock->br_first_free */
-            brfs_write_block_ptr(superblock->br_first_free, isLast ? 0 : nextp);
-            superblock->br_first_free = nextp;
-        }
+        brfs_write_block(sbffp, buf + offset, nbytes);
 
-        if (nextp == 0) {
-            /* Sector requires format */
+        if (isLast) {
             brfs_write_block_ptr(superblock->br_first_free, 0);
+        } else if (nextp == 0) {
+            /* If it's a never written block, have to format it */
+            brfs_write_block_ptr(sbffp, 1);
         }
     }
 
@@ -331,7 +392,7 @@ brfs_new_entry(const char *nodname, uint64_t first_block, uint16_t mode,
     return entry;
 }
 
-void
+int
 brfs_write_entry(brfs_dir_entry_64_t *      dir,
                  const brfs_dir_entry_64_t *new_entry) {
     size_t block_idx_dir  = dir->br_first_block;
@@ -347,11 +408,17 @@ brfs_write_entry(brfs_dir_entry_64_t *      dir,
     if (!place) {
         /* Never found a fit. Write to a new block
            TODO: Append new block */
+        return -ENOSPC;
     } else {
         /* Write the new dirbuf to corresponding block */
         memcpy(place, new_entry, new_entry_size);
-        brfs_write_block(block_idx_new, dirbuf, sizeof(dirbuf));
+        if (sizeof(dirbuf) !=
+            brfs_write_block(block_idx_new, dirbuf, sizeof(dirbuf))) {
+            return -EIO;
+        }
     }
+
+    return 0;
 }
 
 /* ====================== FUSE OPERATIONS ======================*/
@@ -534,7 +601,13 @@ brfs_fuse_mknod(const char *path, mode_t mode, dev_t dev_t) {
     brfs_dir_entry_64_t *entry =
         brfs_new_entry(nodname, superblock->br_first_free, mode, creation_time);
 
-    brfs_write_entry(parent_dir, entry);
+    if ((err = brfs_write_entry(parent_dir, entry)) != 0) {
+        debug_log(1, "brfs_fuse_mknod: could not write file %s (%s)\n", path,
+                  strerror(err));
+        return err;
+    }
+
+    brfs_advance_next_ptr();
 
     /* Update parent_dir size */
     if (strlen(&parent_dir->br_file_name_firstc) == 1) {
@@ -547,12 +620,27 @@ brfs_fuse_mknod(const char *path, mode_t mode, dev_t dev_t) {
     return 0;
 }
 
+/** Create a directory
+ *
+ * Note that the mode argument may not have the type specification
+ * bits set, i.e. S_ISDIR(mode) can be false.  To obtain the
+ * correct directory type bits use  mode|S_IFDIR
+ * */
+int
+brfs_fuse_mkdir(const char *path, mode_t mode) {
+    brfs_zero_block(superblock->br_first_free);
+
+    return brfs_fuse_mknod(path, mode | S_IFDIR,
+                           0 /* TODO: figure out which dev_t to use */);
+}
+
 struct fuse_operations brfs_operations = {
     .getattr = brfs_fuse_getattr,
     .readdir = brfs_fuse_readdir,
     .open    = brfs_fuse_open,
     .read    = brfs_fuse_read,
     .mknod   = brfs_fuse_mknod,
+    .mkdir   = brfs_fuse_mkdir,
 };
 
 struct brfs_fuse_state {};

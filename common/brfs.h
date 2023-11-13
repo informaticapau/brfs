@@ -34,7 +34,7 @@ typedef struct _brfs_attr {
     uint32_t br_crtime;
     uint32_t br_atime;
     uint32_t br_mtime;
-} brfs_attr_t;
+} __attribute__((packed)) brfs_attr_t;
 
 /* 16-bit pointer directory entry */
 typedef struct _brfs_dir_entry_16 {
@@ -42,7 +42,7 @@ typedef struct _brfs_dir_entry_16 {
     brfs_attr_t br_attributes;
     uint16_t    br_first_block;
     char        br_file_name_firstc;
-} brfs_dir_entry_16_t;
+} __attribute__((packed)) brfs_dir_entry_16_t;
 
 /* 32-bit pointer directory entry */
 typedef struct _brfs_dir_entry_32 {
@@ -50,7 +50,7 @@ typedef struct _brfs_dir_entry_32 {
     brfs_attr_t br_attributes;
     uint32_t    br_first_block;
     char        br_file_name_firstc;
-} brfs_dir_entry_32_t;
+} __attribute__((packed)) brfs_dir_entry_32_t;
 
 /* 64-bit pointer directory entry */
 typedef struct _brfs_dir_entry_64 {
@@ -58,7 +58,7 @@ typedef struct _brfs_dir_entry_64 {
     brfs_attr_t br_attributes;
     uint64_t    br_first_block;
     char        br_file_name_firstc;
-} brfs_dir_entry_64_t;
+} __attribute__((packed)) brfs_dir_entry_64_t;
 
 /* Superblock up to ptr_size dependent fields */
 #define _BRFS_SUPERBLOCK_HEADER                                                \
@@ -66,11 +66,11 @@ typedef struct _brfs_dir_entry_64 {
     uint8_t br_block_size;                                                     \
     uint8_t br_ptr_size;
 
-#define BRFS_SUPERBLOCK_MAX_SIZE    sizeof(brfs_superblock_64_t)
+#define BRFS_SUPERBLOCK_MAX_SIZE sizeof(brfs_superblock_64_t)
 
 typedef struct _brfs_superblock_base {
     _BRFS_SUPERBLOCK_HEADER
-} brfs_superblock_base_t;
+} __attribute__((packed)) brfs_superblock_base_t;
 
 /* 16-bit pointer superblock */
 typedef struct _brfs_superblock_16 {
@@ -79,7 +79,7 @@ typedef struct _brfs_superblock_16 {
     uint16_t            br_free_blocks;
     uint16_t            br_first_free;
     brfs_dir_entry_16_t br_root_ent;
-} brfs_superblock_16_t;
+} __attribute__((packed)) brfs_superblock_16_t;
 
 /* 32-bit pointer superblock */
 typedef struct _brfs_superblock_32 {
@@ -88,7 +88,7 @@ typedef struct _brfs_superblock_32 {
     uint32_t            br_free_blocks;
     uint32_t            br_first_free;
     brfs_dir_entry_32_t br_root_ent;
-} brfs_superblock_32_t;
+} __attribute__((packed)) brfs_superblock_32_t;
 
 /* 64-bit pointer superblock */
 typedef struct _brfs_superblock_64 {
@@ -97,6 +97,6 @@ typedef struct _brfs_superblock_64 {
     uint64_t            br_free_blocks;
     uint64_t            br_first_free;
     brfs_dir_entry_64_t br_root_ent;
-} brfs_superblock_64_t;
+} __attribute__((packed)) brfs_superblock_64_t;
 
 #endif /* _BRFS_H */

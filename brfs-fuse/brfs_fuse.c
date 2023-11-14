@@ -116,37 +116,6 @@ brfs_write_block(size_t block_idx, const void *buf, size_t n) {
     return brfs_write_block_offset(block_idx, buf, n, 0);
 }
 
-int
-brfs_zero_block(size_t block_idx) {
-    if (block_idx == 0)
-        return -1; /* Cannot write to protected Superblock */
-
-    uint8_t *zeros = calloc(block_size_bytes, 1);
-    if (!zeros) {
-        debug_log(1, "brfs_zero_block: %s\n", strerror(errno));
-        return -1;
-    }
-
-    if (lseek(fsfd, block_size_bytes * block_idx, SEEK_SET) < 0) {
-        debug_log(1, "brfs_zero_block: lseek: %s\n", strerror(errno));
-        free(zeros);
-        return -1;
-    }
-
-    if (block_size_bytes != write(fsfd, zeros, block_size_bytes)) {
-        debug_log(1,
-                  "brfs_zero_block: read did not returned exactly "
-                  "block_size_bytes (%d)",
-                  block_size_bytes);
-        free(zeros);
-        return -1;
-    }
-
-    free(zeros);
-
-    return 0;
-}
-
 uint64_t
 brfs_read_block_ptr(uint64_t block_idx) {
     /* This is a ""text"" buffer for reading bytes, not the returning value */
@@ -227,7 +196,7 @@ brfs_advance_next_ptr() {
 }
 
 ssize_t
-brfs_read(brfs_dir_entry_64_t *entry, void *buf) {
+brfs_read(const brfs_dir_entry_64_t *entry, void *buf) {
     size_t   readed    = 0;
     uint64_t block_idx = entry->br_first_block;
 
@@ -273,61 +242,103 @@ brfs_write(const void *buf, size_t n) {
     return n_blocks;
 }
 
-brfs_dir_entry_64_t *
-brfs_find_in_dir(const char *filename, brfs_dir_entry_64_t *dir,
-                 const char *dirbuf, uint64_t *foundon_block_idx) {
-    size_t block_idx_dir = dir->br_first_block;
+ssize_t
+brfs_write_file_offset(const brfs_dir_entry_64_t *file, const void *buf,
+                       size_t n, size_t offset) {
+    ssize_t written = 0;
 
-    while (block_idx_dir != 0) {
-        /* Read the block */
-        if (brfs_read_block(block_idx_dir, (void *)dirbuf, block_size_bytes) !=
-            block_size_bytes) {
-            debug_log(-1, "brfs_find_in_dir: Error reading block_idx %d\n",
-                      block_idx_dir);
-            return NULL;
-        }
+    size_t nblock            = CALC_N_BLOCKS(offset) - 1;
+    size_t blkdata_offsetted = nblock * block_data_size_bytes;
+    size_t blockoffset       = offset - blkdata_offsetted;
+    size_t block_data_available =
+        blkdata_offsetted + block_data_size_bytes - offset;
 
-        brfs_dir_entry_64_t *e = (brfs_dir_entry_64_t *)dirbuf;
+    size_t block_idx = file->br_first_block;
 
-        while ((char *)e < dirbuf + block_data_size_bytes) {
-            if (strcmp(&e->br_file_name_firstc, filename) == 0) {
-                /* FOUND */
-                if (foundon_block_idx)
-                    *foundon_block_idx = block_idx_dir;
-                return e;
-            }
+    size_t nw = n;
+    while (written < n) {
+        written += brfs_write_block_offset(
+            block_idx, buf + written,
+            nw > block_data_available ? block_data_available : nw, blockoffset);
+        nw -= written;
 
-            /* Cast to (void*), because adding offset is in bytes, not sizeof */
-            e = ((void *)e) + brfs_sizeof_dir_entry(e);
-        }
+        blockoffset          = 0;
+        block_data_available = block_data_size_bytes;
 
-        /* Get next pointer */
-        block_idx_dir = brfs_resolve_next_ptr(block_idx_dir);
+        block_idx = brfs_resolve_next_ptr(block_idx);
     }
 
+    return written;
+}
+
+brfs_dir_entry_64_t *
+brfs_find_in_dir(const char *filename, const brfs_dir_entry_64_t *dir,
+                 size_t *foundon_offset) {
+    size_t block_idx_dir = dir->br_first_block;
+
+    void *dirbuf = malloc(dir->br_file_size);
+    if (dir->br_file_size != brfs_read(dir, dirbuf)) {
+        debug_log(1, "brfs_find_in_dir: Error reading file %s (EIO)\n",
+                  &dir->br_file_name_firstc);
+        if (dirbuf)
+            free(dirbuf);
+        return NULL;
+    }
+
+    void *dirbuf_max_addr = dirbuf + dir->br_file_size;
+
+    brfs_dir_entry_64_t *e = (brfs_dir_entry_64_t *)dirbuf;
+    while (((void *)e) + brfs_sizeof_dir_entry(e) <= dirbuf_max_addr) {
+        if (strcmp(&e->br_file_name_firstc, filename) == 0) {
+            /* FOUND */
+            if (foundon_offset)
+                *foundon_offset = ((void *)e) - dirbuf;
+
+            brfs_dir_entry_64_t *r =
+                memdup((void *)e, brfs_sizeof_dir_entry(e));
+
+            free(dirbuf);
+            return r;
+        }
+
+        /* Cast to (void*), because adding offset is in bytes, not sizeof */
+        e = ((void *)e) + brfs_sizeof_dir_entry(e);
+    }
+
+    free(dirbuf);
     return NULL;
 }
 
+/*
+ *
+ */
 int
-brfs_walk_tree(const char *path, brfs_dir_entry_64_t **entry) {
+brfs_walk_tree(const char *path, brfs_dir_entry_64_t **entry,
+               brfs_dir_entry_64_t **parent_entry) {
     if (*path != '/') {
         debug_log(1, "brfs_walk_tree: error: Path not absolute\n");
         return -EIO;
     }
+
+    brfs_dir_entry_64_t *prev_dir_entry =
+        memdup(&superblock->br_root_ent, sizeof(brfs_dir_entry_64_t) + 1);
+    /* +1, because `br_root_ent->br_file_name_firstc` is 1 char, but
+     * the root entry name is "/", which i.e.: {'/','\0'} (see
+     * brfs_mkfs.c)
+     */
+
+    /* Path is root, i.e.: `path == "/"` */
     if (strlen(path) == 1) {
+        if (parent_entry)
+            *parent_entry = NULL;
+
         if (entry)
-            *entry = memdup(&superblock->br_root_ent,
-                            sizeof(brfs_dir_entry_64_t) + 1);
-        /* +1, because `br_root_ent->br_file_name_firstc` is 1 char, but
-         * the root entry name is "/", which i.e.: {'/','\0'} (see brfs_mkfs.c)
-         */
+            *entry = prev_dir_entry;
+
         return 0;
     }
 
-    char dirbuf[block_size_bytes];
-
-    brfs_dir_entry_64_t *prev_dir_entry = &superblock->br_root_ent;
-    brfs_dir_entry_64_t *next_file      = NULL;
+    brfs_dir_entry_64_t *next_file = NULL;
 
     char *patht = strdup(path);
     char *tok   = strtok(patht, "/");
@@ -337,30 +348,50 @@ brfs_walk_tree(const char *path, brfs_dir_entry_64_t **entry) {
             debug_log(1, "brfs_walk_tree: Token not a directory: %s\n", tok);
             if (prev_dir_entry != &superblock->br_root_ent)
                 free(prev_dir_entry);
+            free(patht);
             return -ENOTDIR;
         }
 
         /* Find tok in directory */
-        next_file = brfs_find_in_dir(tok, prev_dir_entry, dirbuf, NULL);
+        next_file = brfs_find_in_dir(tok, prev_dir_entry, NULL);
         if (!next_file) {
-            debug_log(1, "brfs_walk_tree: file does not exist: %s\n", path);
-            if (prev_dir_entry != &superblock->br_root_ent)
-                free(prev_dir_entry);
-
+            debug_log(1,
+                      "brfs_walk_tree: file \"%s\" does not exist in dir "
+                      "\"%s\" (%s) \n",
+                      tok, &prev_dir_entry->br_file_name_firstc, path);
+            free(prev_dir_entry);
+            free(patht);
             return -ENOENT;
         }
 
         /* Propagate tok */
-        prev_dir_entry = memdup(next_file, brfs_sizeof_dir_entry(next_file));
-        tok            = strtok(NULL, "/");
+        tok = strtok(NULL, "/");
+        if (!tok) /* Prevent overwriting prev_dir_entry */
+            break;
+
+        /* Operations to do, if there are more walk iterations,
+         * i.e.: `tok != NULL` */
+
+        free(prev_dir_entry);
+        prev_dir_entry =
+            memdup(next_file, brfs_sizeof_dir_entry(next_file)); // tofree
+
+        /* free the previous data to avoid memory leak */
+        free(next_file);
     }
 
-    if (prev_dir_entry != &superblock->br_root_ent)
+    free(patht);
+
+    if (parent_entry)
+        *parent_entry = prev_dir_entry;
+    else
         free(prev_dir_entry);
 
     /* Path propagated, next_file should be our file */
     if (entry)
         *entry = next_file;
+    else
+        free(next_file);
 
     return 0;
 }
@@ -368,7 +399,7 @@ brfs_walk_tree(const char *path, brfs_dir_entry_64_t **entry) {
 bool
 brfs_file_exists(const char *path) {
     brfs_dir_entry_64_t *aux;
-    return brfs_walk_tree(path, &aux) == 0;
+    return brfs_walk_tree(path, &aux, NULL) == 0;
 }
 
 brfs_dir_entry_64_t *
@@ -392,30 +423,26 @@ brfs_new_entry(const char *nodname, uint64_t first_block, uint16_t mode,
     return entry;
 }
 
+/**
+ * Write or modify (if already exists) an entry in a directory
+ */
 int
-brfs_write_entry(brfs_dir_entry_64_t *      dir,
+brfs_write_entry(const brfs_dir_entry_64_t *dir,
                  const brfs_dir_entry_64_t *new_entry) {
-    size_t block_idx_dir  = dir->br_first_block;
+
+    uint64_t                   foundon_offset = 0;
+    const brfs_dir_entry_64_t *old_entry =
+        brfs_find_in_dir(&new_entry->br_file_name_firstc, dir, &foundon_offset);
+
+    if (!old_entry)
+        foundon_offset = dir->br_file_size;
+
     size_t new_entry_size = brfs_sizeof_dir_entry(new_entry);
 
-    char     dirbuf[block_size_bytes];
-    uint64_t block_idx_new = 0;
-
-    /* Search for an available space (filename == "") */
-    brfs_dir_entry_64_t *place =
-        brfs_find_in_dir("", dir, dirbuf, &block_idx_new);
-
-    if (!place) {
-        /* Never found a fit. Write to a new block
-           TODO: Append new block */
-        return -ENOSPC;
-    } else {
-        /* Write the new dirbuf to corresponding block */
-        memcpy(place, new_entry, new_entry_size);
-        if (sizeof(dirbuf) !=
-            brfs_write_block(block_idx_new, dirbuf, sizeof(dirbuf))) {
-            return -EIO;
-        }
+    if (new_entry_size != brfs_write_file_offset(dir, (void *)new_entry,
+                                                 new_entry_size,
+                                                 foundon_offset)) {
+        return -EIO;
     }
 
     return 0;
@@ -435,7 +462,7 @@ brfs_fuse_getattr(const char *path, struct stat *st) {
     int err = 0;
 
     brfs_dir_entry_64_t *file_entry = NULL;
-    if ((err = brfs_walk_tree(path, &file_entry)) < 0) {
+    if ((err = brfs_walk_tree(path, &file_entry, NULL)) < 0) {
         debug_log(1, "brfs_fuse_getattr: error brfs_walk_tree(\"%s\"): %s\n",
                   path, strerror(err));
         return err;
@@ -450,10 +477,7 @@ brfs_fuse_getattr(const char *path, struct stat *st) {
     st->st_nlink = 0;
     st->st_ino   = 0;
 
-    /* The following line keeps throwing me a double free error, uncomment it
-     * under your own risk.
-     * TODO: Investigate */
-    // free(file_entry);
+    free(file_entry);
 
     return 0;
 }
@@ -488,7 +512,7 @@ brfs_fuse_readdir(const char *path, void *buffer, fuse_fill_dir_t filler,
 
     /* Find directory */
     brfs_dir_entry_64_t *dir_entry = NULL;
-    if ((err = brfs_walk_tree(path, &dir_entry)) < 0) {
+    if ((err = brfs_walk_tree(path, &dir_entry, NULL)) < 0) {
         debug_log(1, "brfs_fuse_readdir: error brfs_walk_tree(\"%s\"): %s\n",
                   path, strerror(err));
         return err;
@@ -519,7 +543,7 @@ brfs_fuse_readdir(const char *path, void *buffer, fuse_fill_dir_t filler,
 
         /* Get next entry */
         current_entry =
-            (void *)current_entry + brfs_sizeof_dir_entry(current_entry);
+            ((void *)current_entry) + brfs_sizeof_dir_entry(current_entry);
     }
 
     free(dir_first);
@@ -584,8 +608,9 @@ brfs_fuse_mknod(const char *path, mode_t mode, dev_t dev_t) {
     int err = 0;
 
     /* Find directory */
+    brfs_dir_entry_64_t *grandparent_dir;
     brfs_dir_entry_64_t *parent_dir;
-    if ((err = brfs_walk_tree(_dirname, &parent_dir)) < 0) {
+    if ((err = brfs_walk_tree(_dirname, &parent_dir, &grandparent_dir)) < 0) {
         debug_log(1, "brfs_fuse_mknod: error brfs_walk_tree(\"%s\"): %s\n ",
                   _dirname, strerror(err));
         return err;
@@ -614,7 +639,9 @@ brfs_fuse_mknod(const char *path, mode_t mode, dev_t dev_t) {
         /* Is Root */
         superblock->br_root_ent.br_file_size += brfs_sizeof_dir_entry(entry);
     } else {
-        /* TODO: BR1 */
+        /* Increase parent size, and rewrite parent entry */
+        parent_dir->br_file_size += brfs_sizeof_dir_entry(entry);
+        brfs_write_entry(grandparent_dir, parent_dir);
     }
 
     return 0;
@@ -628,8 +655,6 @@ brfs_fuse_mknod(const char *path, mode_t mode, dev_t dev_t) {
  * */
 int
 brfs_fuse_mkdir(const char *path, mode_t mode) {
-    brfs_zero_block(superblock->br_first_free);
-
     return brfs_fuse_mknod(path, mode | S_IFDIR,
                            0 /* TODO: figure out which dev_t to use */);
 }

@@ -32,6 +32,8 @@
 #include "../common/brfs.h"
 #include "../common/log.h"
 
+#define FIRST_FREE_BLOCK 2
+
 /** Not a very fan of this, please use it wisely */
 #define CREATE_ROOT_ENTRY(root_ent, mode, uid, gid, creation_time)             \
     root_ent->br_file_size = 0; /* Folder will grow with entries */            \
@@ -46,10 +48,7 @@
     root_ent->br_first_block = 1u;                                             \
                                                                                \
     char *filename = (char *)&root_ent->br_file_name_firstc;                   \
-    strcpy(filename, "/");                                                     \
-                                                                               \
-    /* Empty directory (all entries should be zero, this also handles ptr) */  \
-    memset((void *)(mapped + block_size_bytes), 0, block_size_bytes);
+    strcpy(filename, "/");
 
 static const char BRFS_MAGIC_BYTES[4] = BRFS_MAGIC;
 
@@ -138,7 +137,7 @@ main(int argc, char **argv) {
         sb->br_ptr_size    = pointer_bytes;
         sb->br_fs_size     = total_blocks;
         sb->br_free_blocks = total_blocks - 2;
-        sb->br_first_free  = 2u;
+        sb->br_first_free  = FIRST_FREE_BLOCK;
 
         brfs_dir_entry_16_t *root_ent = (brfs_dir_entry_16_t *)&sb->br_root_ent;
         CREATE_ROOT_ENTRY(root_ent, 0755, getuid(), getgid(), creation_time)
@@ -149,7 +148,7 @@ main(int argc, char **argv) {
         sb->br_ptr_size    = pointer_bytes;
         sb->br_fs_size     = total_blocks;
         sb->br_free_blocks = total_blocks - 2;
-        sb->br_first_free  = 2u;
+        sb->br_first_free  = FIRST_FREE_BLOCK;
 
         brfs_dir_entry_32_t *root_ent = (brfs_dir_entry_32_t *)&sb->br_root_ent;
         CREATE_ROOT_ENTRY(root_ent, 0755, getuid(), getgid(), creation_time)
@@ -160,18 +159,21 @@ main(int argc, char **argv) {
         sb->br_ptr_size    = pointer_bytes;
         sb->br_fs_size     = total_blocks;
         sb->br_free_blocks = total_blocks - 2;
-        sb->br_first_free  = 2u;
+        sb->br_first_free  = FIRST_FREE_BLOCK;
 
         brfs_dir_entry_64_t *root_ent = (brfs_dir_entry_64_t *)&sb->br_root_ent;
         CREATE_ROOT_ENTRY(root_ent, 0755, getuid(), getgid(), creation_time)
     }
 
-    // Format the next block.
-    // This block is pointed by (sb->br_first_free), so it means is removed,
-    // Since this is the last block, and not a erased block, requires to be
-    // next_pointer = 0
-    memset((void *)(mapped + block_size_bytes * 3 - pointer_bytes), 0,
+    /* 1. Format pointer for ROOT directory */
+    memset((void *)(mapped + block_size_bytes * 2 - pointer_bytes), 0,
            pointer_bytes);
+
+    /* 2. Format pointer for block pointed by (sb->br_first_free).
+     * Please, ensure it's mmapped */
+    memset((void *)(mapped + block_size_bytes * (1 + FIRST_FREE_BLOCK) -
+                    pointer_bytes),
+           0, pointer_bytes);
 
     munmap(mapped, 2 * block_size_bytes);
     close(fsfd);

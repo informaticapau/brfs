@@ -118,15 +118,15 @@ brfs_write_block(size_t block_idx, const void *buf, size_t n) {
 
 uint64_t
 brfs_read_block_ptr(uint64_t block_idx) {
-    /* This is a ""text"" buffer for reading bytes, not the returning value */
-    unsigned char ptr_buffer[pointer_size_bytes];
-
     if (lseek(fsfd, block_size_bytes * block_idx + block_data_size_bytes,
               SEEK_SET) < 0) {
-        debug_log(1, "brfs_read_block_ptr: lseek: %s\n", strerror(errno));
+        debug_log(1, "brfs_read_block_ptr: lseek: %s (reading block %d)\n",
+                  strerror(errno), block_idx);
         return -1;
     }
 
+    /* This is a ""text"" buffer for reading bytes, not the returning value */
+    unsigned char ptr_buffer[pointer_size_bytes];
     if (read(fsfd, ptr_buffer, pointer_size_bytes) != pointer_size_bytes) {
         debug_log(1,
                   "brfs_read_block_ptr: read did not returned exactly "
@@ -217,6 +217,7 @@ brfs_read(const brfs_dir_entry_64_t *entry, void *buf) {
 ssize_t
 brfs_write(const void *buf, size_t n) {
     /* Number of blocks to write */
+    ssize_t written  = 0;
     ssize_t n_blocks = CALC_N_BLOCKS(n);
 
     for (size_t i = 0; i < n_blocks; i++) {
@@ -227,7 +228,7 @@ brfs_write(const void *buf, size_t n) {
         size_t sbffp = superblock->br_first_free;
         size_t nextp = brfs_advance_next_ptr();
 
-        brfs_write_block(sbffp, buf + offset, nbytes);
+        written += brfs_write_block(sbffp, buf + offset, nbytes);
 
         if (isLast) {
             brfs_write_block_ptr(superblock->br_first_free, 0);
@@ -237,7 +238,7 @@ brfs_write(const void *buf, size_t n) {
         }
     }
 
-    return n_blocks;
+    return written;
 }
 
 ssize_t
@@ -253,17 +254,40 @@ brfs_write_file_offset(const brfs_dir_entry_64_t *file, const void *buf,
 
     size_t block_idx = file->br_first_block;
 
-    size_t nw = n;
+    /* Skip offsetted blocks */
+    for (size_t i = 0; i < nblock; i++)
+        block_idx = brfs_resolve_next_ptr(block_idx);
+
+    size_t remaining_bytes = n;
     while (written < n) {
         written += brfs_write_block_offset(
             block_idx, buf + written,
-            nw > block_data_available ? block_data_available : nw, blockoffset);
-        nw -= written;
+            remaining_bytes > block_data_available ? block_data_available
+                                                   : remaining_bytes,
+            blockoffset);
+        remaining_bytes -= written;
 
+        /* Next block is full write */
         blockoffset          = 0;
         block_data_available = block_data_size_bytes;
 
-        block_idx = brfs_resolve_next_ptr(block_idx);
+        /* Resolve next block and continue */
+        size_t current_block_idx = block_idx;
+        block_idx                = brfs_resolve_next_ptr(block_idx);
+
+        /* If there is no next_block, requires creating one */
+        if (!block_idx && remaining_bytes > 0) {
+            size_t next_pointer =
+                (current_block_idx + 1 == superblock->br_first_free)
+                    ? 1
+                    : superblock->br_first_free;
+
+            /* Write a pointer to the new block in the end of the file */
+            brfs_write_block_ptr(current_block_idx, next_pointer);
+
+            /* Write the remaining bytes */
+            written += brfs_write(buf + written, remaining_bytes);
+        }
     }
 
     return written;

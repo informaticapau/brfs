@@ -124,7 +124,6 @@ brfs_read_block_ptr(uint64_t block_idx) {
     if (lseek(fsfd, block_size_bytes * block_idx + block_data_size_bytes,
               SEEK_SET) < 0) {
         debug_log(1, "brfs_read_block_ptr: lseek: %s\n", strerror(errno));
-        free(ptr_buffer);
         return -1;
     }
 
@@ -133,7 +132,6 @@ brfs_read_block_ptr(uint64_t block_idx) {
                   "brfs_read_block_ptr: read did not returned exactly "
                   "pointer_size_bytes (%d)",
                   pointer_size_bytes);
-        free(ptr_buffer);
         return -1;
     }
 

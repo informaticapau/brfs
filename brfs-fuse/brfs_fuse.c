@@ -193,6 +193,10 @@ brfs_advance_next_ptr() {
     return nextp;
 }
 
+/** Return 1 if `next_blkid == curr_blkid + 1`, otherwise return next_blkid */
+#define brfs_blockptr_resolve_diff(curr_blkid, next_blkid)                     \
+    ((curr_blkid + 1 == next_blkid) ? 1 : next_blkid)
+
 ssize_t
 brfs_read(const brfs_dir_entry_64_t *entry, void *buf) {
     size_t   readed    = 0;
@@ -255,8 +259,25 @@ brfs_write_file_offset(const brfs_dir_entry_64_t *file, const void *buf,
     size_t block_idx = file->br_first_block;
 
     /* Skip offsetted blocks */
-    for (size_t i = 0; i < nblock; i++)
-        block_idx = brfs_resolve_next_ptr(block_idx);
+    for (size_t i = 0; i < nblock; i++) {
+        size_t nextp = brfs_resolve_next_ptr(block_idx);
+        if (!nextp) {
+            /* Put a pointer in case that the offset is longer than the file */
+            brfs_write_block_ptr(block_idx,
+                                 brfs_blockptr_resolve_diff(
+                                     block_idx, superblock->br_first_free));
+
+            block_idx = superblock->br_first_free;
+            brfs_advance_next_ptr();
+            continue;
+        } else if (i == nblock - 1) {
+            /* If nextp != 0 and is the last iteration,
+             * nextp requires to be zero (EOF) */
+            brfs_write_block_ptr(nextp, 0);
+        }
+
+        block_idx = nextp;
+    }
 
     size_t remaining_bytes = n;
     while (written < n) {
@@ -277,10 +298,8 @@ brfs_write_file_offset(const brfs_dir_entry_64_t *file, const void *buf,
 
         /* If there is no next_block, requires creating one */
         if (!block_idx && remaining_bytes > 0) {
-            size_t next_pointer =
-                (current_block_idx + 1 == superblock->br_first_free)
-                    ? 1
-                    : superblock->br_first_free;
+            size_t next_pointer = brfs_blockptr_resolve_diff(
+                current_block_idx, superblock->br_first_free);
 
             /* Write a pointer to the new block in the end of the file */
             brfs_write_block_ptr(current_block_idx, next_pointer);
@@ -462,9 +481,13 @@ brfs_write_entry(const brfs_dir_entry_64_t *dir,
 
     size_t new_entry_size = brfs_sizeof_dir_entry(new_entry);
 
-    if (new_entry_size != brfs_write_file_offset(dir, (void *)new_entry,
-                                                 new_entry_size,
-                                                 foundon_offset)) {
+    ssize_t written = brfs_write_file_offset(dir, (void *)new_entry,
+                                             new_entry_size, foundon_offset);
+    if (new_entry_size != written) {
+        debug_log(-1,
+                  "brfs_write_entry: I/O expected %ld, but read %ld "
+                  "(brfs_write_file_offset)\n",
+                  new_entry_size, written);
         return -EIO;
     }
 
@@ -611,11 +634,49 @@ brfs_fuse_truncate(const char *path, off_t length) {
         return err;
     }
 
+    /* If no change, just return 0 */
+    if (length == file_entry->br_file_size)
+        return 0;
+
+    /* Update file remaining data, as specified by truncate(2) */
+
+    bool isExpanding = length > file_entry->br_file_size;
+
+    /* The following code is reduced from:
+     * ```
+     * if (isExpanding) {
+     *   brfs_write_file_offset(...,
+     *     length - file_entry->br_file_size,
+     *     file_entry->br_file_size);
+     * } else {
+     *   brfs_write_file_offset(...,
+     *     file_entry->br_file_size - length,
+     *     length);
+     * }
+     * ```
+     */
+    ssize_t zero_buf_size = isExpanding ? (length - file_entry->br_file_size)
+                                        : (file_entry->br_file_size - length);
+    void *  zero_buf      = calloc(zero_buf_size, 1);
+
+    ssize_t written =
+        brfs_write_file_offset(file_entry, zero_buf, zero_buf_size,
+                               isExpanding ? file_entry->br_file_size : length);
+    if (zero_buf_size != written) {
+        debug_log(-1,
+                  "brfs_fuse_truncate: I/O expected %ld, but read %ld "
+                  "(brfs_write_file_offset)\n",
+                  zero_buf_size, written);
+        free(zero_buf);
+        return -EIO;
+    }
+
+    free(zero_buf);
+
+    /* Finally, update file size */
     file_entry->br_file_size = length;
 
     err = brfs_write_entry(file_parent, file_entry);
-
-    /* TODO: set null bytes, if shorter */
 
     return err;
 }
@@ -734,8 +795,31 @@ brfs_fuse_read(const char *path, char *buf, size_t size, off_t offset,
 int
 brfs_fuse_write(const char *path, const char *buf, size_t size, off_t offset,
                 struct fuse_file_info *fi) {
-    debug_log(1, "write(\"%s\", %dB, %p)\n", path, size, offset);
-    return 0;
+
+    int err = 0;
+
+    brfs_dir_entry_64_t *parent_dir;
+    brfs_dir_entry_64_t *file_entry;
+    if ((err = brfs_walk_tree(path, &file_entry, &parent_dir)) < 0) {
+        debug_log(1, "brfs_fuse_write: error brfs_walk_tree(\"%s\"): %s\n",
+                  path, strerror(err));
+        return err;
+    }
+
+    ssize_t written = brfs_write_file_offset(file_entry, buf, size, offset);
+    if (size != written) {
+        debug_log(-1,
+                  "brfs_fuse_write: I/O expected %ld, but read %ld "
+                  "(brfs_write_file_offset)\n",
+                  size, written);
+        return -EIO;
+    }
+
+    file_entry->br_file_size = offset + size;
+
+    err = brfs_write_entry(parent_dir, file_entry);
+
+    return written;
 }
 
 /** Create a file node

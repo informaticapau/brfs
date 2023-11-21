@@ -447,6 +447,7 @@ brfs_new_entry(const char *nodname, uint64_t first_block, uint16_t mode,
 
 /**
  * Write or modify (if already exists) an entry in a directory
+ * @return 0 if success, errno otherwise
  */
 int
 brfs_write_entry(const brfs_dir_entry_64_t *dir,
@@ -490,17 +491,33 @@ brfs_fuse_getattr(const char *path, struct stat *st) {
         return err;
     }
 
-    st->st_size  = file_entry->br_file_size;
-    st->st_uid   = file_entry->br_attributes.br_uid;
-    st->st_gid   = file_entry->br_attributes.br_gid;
-    st->st_mode  = file_entry->br_attributes.br_mode;
-    st->st_atime = file_entry->br_attributes.br_atime;
-    st->st_mtime = file_entry->br_attributes.br_mtime;
-    st->st_nlink = 0;
-    st->st_ino   = 0;
+    st->st_size        = file_entry->br_file_size;
+    st->st_uid         = file_entry->br_attributes.br_uid;
+    st->st_gid         = file_entry->br_attributes.br_gid;
+    st->st_mode        = file_entry->br_attributes.br_mode;
+    st->st_atim.tv_sec = file_entry->br_attributes.br_atime;
+    st->st_mtim.tv_sec = file_entry->br_attributes.br_mtime;
+    st->st_nlink       = 0;
+    st->st_ino         = 0;
 
     free(file_entry);
 
+    return 0;
+}
+
+/** Get extended attributes */
+int
+brfs_fuse_getxattr(const char *path, const char *name, char *value,
+                   size_t size) {
+    debug_log(1, "getxattr(\"%s\")\n", path);
+    return 0;
+}
+
+/** Set extended attributes */
+int
+brfs_fuse_setxattr(const char *path, const char *name, const char *value,
+                   size_t size, int flags) {
+    debug_log(1, "setxattr(\"%s\")\n", path);
     return 0;
 }
 
@@ -572,6 +589,99 @@ brfs_fuse_readdir(const char *path, void *buffer, fuse_fill_dir_t filler,
     return 0;
 }
 
+/**
+ * @brief Change the size of a file
+ * The truncate() and ftruncate() functions cause the regular file
+ * named by path or referenced by fd to be truncated to a size of
+ * precisely length bytes.
+ *
+ * If the file previously was larger than this size, the extra data
+ * is lost.  If the file previously was shorter, it is extended, and
+ * the extended part reads as null bytes ('\0').
+ */
+int
+brfs_fuse_truncate(const char *path, off_t length) {
+    int err = 0;
+
+    brfs_dir_entry_64_t *file_parent;
+    brfs_dir_entry_64_t *file_entry;
+    if ((err = brfs_walk_tree(path, &file_entry, &file_parent)) < 0) {
+        debug_log(1, "brfs_fuse_truncate: error brfs_walk_tree(\"%s\"): %s\n",
+                  path, strerror(err));
+        return err;
+    }
+
+    file_entry->br_file_size = length;
+
+    err = brfs_write_entry(file_parent, file_entry);
+
+    /* TODO: set null bytes, if shorter */
+
+    return err;
+}
+
+/**
+ * Change the access and modification times of a file with
+ * nanosecond resolution
+ *
+ * This supersedes the old utime() interface.  New applications
+ * should use this.
+ *
+ * See the utimensat(2) man page for details.
+ *
+ * Introduced in version 2.6
+ *
+ * For both calls, the new file timestamps are specified in the
+ * array times: times[0] specifies the new "last access time"
+ * (atime); times[1] specifies the new "last modification time"
+ * (mtime).  Each of the elements of times specifies a time as the
+ * number of seconds and nanoseconds since the Epoch, 1970-01-01
+ * 00:00:00 +0000 (UTC).  This information is conveyed in a
+ * timespec(3) structure.
+ */
+int
+brfs_fuse_utimens(const char *path, const struct timespec tv[2]) {
+
+    int err = 0;
+
+    brfs_dir_entry_64_t *file_parent;
+    brfs_dir_entry_64_t *file_entry;
+    if ((err = brfs_walk_tree(path, &file_entry, &file_parent)) < 0) {
+        debug_log(1, "brfs_fuse_utimens: error brfs_walk_tree(\"%s\"): %s\n",
+                  path, strerror(err));
+        return err;
+    }
+
+    file_entry->br_attributes.br_atime = (uint32_t)tv[0].tv_sec;
+    file_entry->br_attributes.br_mtime = (uint32_t)tv[1].tv_sec;
+
+    err = brfs_write_entry(file_parent, file_entry);
+
+    return err;
+}
+
+/** Change the owner and group of a file */
+int
+brfs_fuse_chown(const char *path, uid_t uid, gid_t gid) {
+
+    int err = 0;
+
+    brfs_dir_entry_64_t *file_parent;
+    brfs_dir_entry_64_t *file_entry;
+    if ((err = brfs_walk_tree(path, &file_entry, &file_parent)) < 0) {
+        debug_log(1, "brfs_fuse_chown: error brfs_walk_tree(\"%s\"): %s\n",
+                  path, strerror(err));
+        return err;
+    }
+
+    file_entry->br_attributes.br_uid = uid;
+    file_entry->br_attributes.br_gid = gid;
+
+    err = brfs_write_entry(file_parent, file_entry);
+
+    return err;
+}
+
 /** File open operation
  *
  * No creation (O_CREAT, O_EXCL) and by default also no
@@ -613,6 +723,21 @@ brfs_fuse_read(const char *path, char *buf, size_t size, off_t offset,
     return 0;
 }
 
+/** Write data to an open file
+ *
+ * Write should return exactly the number of bytes requested
+ * except on error.	 An exception to this is when the 'direct_io'
+ * mount option is specified (see read operation).
+ *
+ * Changed in version 2.2
+ */
+int
+brfs_fuse_write(const char *path, const char *buf, size_t size, off_t offset,
+                struct fuse_file_info *fi) {
+    debug_log(1, "write(\"%s\", %dB, %p)\n", path, size, offset);
+    return 0;
+}
+
 /** Create a file node
  *
  * This is called for creation of all non-directory, non-symlink
@@ -633,7 +758,7 @@ brfs_fuse_mknod(const char *path, mode_t mode, dev_t dev_t) {
     brfs_dir_entry_64_t *grandparent_dir;
     brfs_dir_entry_64_t *parent_dir;
     if ((err = brfs_walk_tree(_dirname, &parent_dir, &grandparent_dir)) < 0) {
-        debug_log(1, "brfs_fuse_mknod: error brfs_walk_tree(\"%s\"): %s\n ",
+        debug_log(1, "brfs_fuse_mknod: error brfs_walk_tree(\"%s\"): %s\n",
                   _dirname, strerror(err));
         return err;
     }
@@ -682,12 +807,16 @@ brfs_fuse_mkdir(const char *path, mode_t mode) {
 }
 
 struct fuse_operations brfs_operations = {
-    .getattr = brfs_fuse_getattr,
-    .readdir = brfs_fuse_readdir,
-    .open    = brfs_fuse_open,
-    .read    = brfs_fuse_read,
-    .mknod   = brfs_fuse_mknod,
-    .mkdir   = brfs_fuse_mkdir,
+    .getattr  = brfs_fuse_getattr,
+    .getxattr = brfs_fuse_getxattr,
+    .truncate = brfs_fuse_truncate,
+    .utimens  = brfs_fuse_utimens,
+    .chown    = brfs_fuse_chown,
+    .readdir  = brfs_fuse_readdir,
+    .read     = brfs_fuse_read,
+    .write    = brfs_fuse_write,
+    .mknod    = brfs_fuse_mknod,
+    .mkdir    = brfs_fuse_mkdir,
 };
 
 struct brfs_fuse_state {};

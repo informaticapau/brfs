@@ -22,6 +22,11 @@
 #ifndef _BRFS_H
 #define _BRFS_H
 
+/* Enable attribute packing in tcc compiler */
+#if defined(__TINYC__)
+#pragma pack(1)
+#endif
+
 #include <stdint.h>
 
 #define BRFS_MAGIC "BRFS"

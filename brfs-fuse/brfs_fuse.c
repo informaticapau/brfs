@@ -25,7 +25,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <libgen.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -83,7 +82,7 @@ brfs_sizeof_dir_entry(const brfs_dir_entry_64_t *dir_entry) {
 #define CALC_N_BLOCKS(n) ((n / (block_data_size_bytes + 1)) + 1)
 
 ssize_t
-brfs_read_block_offset(size_t block_idx, void *buf, size_t n, size_t offset) {
+brfs_read_block_offset(uint64_t block_idx, void *buf, size_t n, size_t offset) {
     if (lseek(fsfd, block_size_bytes * block_idx + offset, SEEK_SET) < 0) {
         debug_log(1, "brfs_read_block_offset: lseek: %s\n", strerror(errno));
         return -1;
@@ -93,12 +92,12 @@ brfs_read_block_offset(size_t block_idx, void *buf, size_t n, size_t offset) {
 }
 
 ssize_t
-brfs_read_block(size_t block_idx, void *buf, size_t n) {
+brfs_read_block(uint64_t block_idx, void *buf, size_t n) {
     return brfs_read_block_offset(block_idx, buf, n, 0);
 }
 
 ssize_t
-brfs_write_block_offset(size_t block_idx, const void *buf, size_t n,
+brfs_write_block_offset(uint64_t block_idx, const void *buf, size_t n,
                         size_t offset) {
     if (block_idx == 0)
         return -1; /* Cannot write to protected Superblock */
@@ -112,7 +111,7 @@ brfs_write_block_offset(size_t block_idx, const void *buf, size_t n,
 }
 
 ssize_t
-brfs_write_block(size_t block_idx, const void *buf, size_t n) {
+brfs_write_block(uint64_t block_idx, const void *buf, size_t n) {
     return brfs_write_block_offset(block_idx, buf, n, 0);
 }
 
@@ -144,7 +143,7 @@ brfs_read_block_ptr(uint64_t block_idx) {
 }
 
 void
-brfs_write_block_ptr(size_t block_idx, size_t next_pointer) {
+brfs_write_block_ptr(uint64_t block_idx, size_t next_pointer) {
     if (block_idx == 0)
         return; /* Cannot write to protected Superblock */
 
@@ -172,9 +171,9 @@ brfs_resolve_next_ptr(uint64_t block_idx) {
  * @brief properly advances `superblock->br_first_free`
  * @return size_t `brfs_read_block_ptr(superblock->br_first_free)`
  */
-size_t
+uint64_t
 brfs_advance_next_ptr() {
-    size_t nextp = brfs_read_block_ptr(superblock->br_first_free);
+    uint64_t nextp = brfs_read_block_ptr(superblock->br_first_free);
 
     switch (nextp) {
         /* Means that the next block is writable
@@ -260,7 +259,7 @@ brfs_write_file_offset(const brfs_dir_entry_64_t *file, const void *buf,
 
     /* Skip offsetted blocks */
     for (size_t i = 0; i < nblock; i++) {
-        size_t nextp = brfs_resolve_next_ptr(block_idx);
+        uint64_t nextp = brfs_resolve_next_ptr(block_idx);
         if (!nextp) {
             /* Put a pointer in case that the offset is longer than the file */
             brfs_write_block_ptr(block_idx,
@@ -293,12 +292,12 @@ brfs_write_file_offset(const brfs_dir_entry_64_t *file, const void *buf,
         block_data_available = block_data_size_bytes;
 
         /* Resolve next block and continue */
-        size_t current_block_idx = block_idx;
-        block_idx                = brfs_resolve_next_ptr(block_idx);
+        uint64_t current_block_idx = block_idx;
+        block_idx                  = brfs_resolve_next_ptr(block_idx);
 
         /* If there is no next_block, requires creating one */
         if (!block_idx && remaining_bytes > 0) {
-            size_t next_pointer = brfs_blockptr_resolve_diff(
+            uint64_t next_pointer = brfs_blockptr_resolve_diff(
                 current_block_idx, superblock->br_first_free);
 
             /* Write a pointer to the new block in the end of the file */
@@ -314,15 +313,15 @@ brfs_write_file_offset(const brfs_dir_entry_64_t *file, const void *buf,
 
 /** Walk a file and return the block after blocks_offsetted, or the first block
  * with a EOF pointer */
-size_t
+uint64_t
 brfs_file_get_nblock(const brfs_dir_entry_64_t *file_entry,
                      size_t                     blocks_offsetted) {
 
-    size_t block_idx = file_entry->br_first_block;
+    uint64_t block_idx = file_entry->br_first_block;
 
     /* Travel to the last block */
     for (size_t i = 0; i < blocks_offsetted; i++) {
-        size_t nextp = brfs_resolve_next_ptr(block_idx);
+        uint64_t nextp = brfs_resolve_next_ptr(block_idx);
         if (!nextp)
             break;
         block_idx = nextp;
@@ -334,12 +333,16 @@ brfs_file_get_nblock(const brfs_dir_entry_64_t *file_entry,
 /** Mark a file as deleted, and properly advances `superblock->br_first_free` */
 void
 brfs_file_delete(const brfs_dir_entry_64_t *file_entry) {
+    if (!file_entry)
+        return;
+
     size_t blocks_offsetted = CALC_N_BLOCKS(file_entry->br_file_size) - 1;
 
-    size_t block_idx = brfs_file_get_nblock(file_entry, blocks_offsetted);
+    uint64_t block_idx = brfs_file_get_nblock(file_entry, blocks_offsetted);
 
     brfs_write_block_ptr(block_idx, brfs_blockptr_resolve_diff(
                                         block_idx, superblock->br_first_free));
+
     superblock->br_first_free = file_entry->br_first_block;
 }
 
@@ -372,8 +375,8 @@ brfs_file_truncate(brfs_dir_entry_64_t *file_entry, size_t length) {
         /* Free the trailing blocks */
         brfs_file_delete(file_entry);
 
-        size_t blocks_offsetted = CALC_N_BLOCKS(length) - 1;
-        size_t nblock = brfs_file_get_nblock(file_entry, blocks_offsetted);
+        uint64_t blocks_offsetted = CALC_N_BLOCKS(length) - 1;
+        uint64_t nblock = brfs_file_get_nblock(file_entry, blocks_offsetted);
 
         /* Make sure that not all the file is erased.
          * Ensure that only erasing the trailing blocks after length, because
@@ -395,7 +398,7 @@ brfs_file_truncate(brfs_dir_entry_64_t *file_entry, size_t length) {
 brfs_dir_entry_64_t *
 brfs_find_in_dir(const char *filename, const brfs_dir_entry_64_t *dir,
                  size_t *foundon_offset) {
-    size_t block_idx_dir = dir->br_first_block;
+    uint64_t block_idx_dir = dir->br_first_block;
 
     void *dirbuf = malloc(dir->br_file_size);
     if (dir->br_file_size != brfs_read(dir, dirbuf)) {
@@ -428,6 +431,57 @@ brfs_find_in_dir(const char *filename, const brfs_dir_entry_64_t *dir,
 
     free(dirbuf);
     return NULL;
+}
+
+char *
+getParentPath(const char *path) {
+    char *tok = (char *)path + strlen(path);
+    while (*tok != '/' && tok > path)
+        tok--;
+
+    /* If parent is root, return "/" */
+    if (tok == path)
+        tok++;
+
+    size_t ppath_size = tok - path;
+
+    char *ppath       = strndup(path, ppath_size + 1);
+    ppath[ppath_size] = '\0';
+
+    return ppath;
+}
+
+char *
+basename(const char *path) {
+    char *tok = (char *)path + strlen(path);
+    while (*tok != '/' && tok > path)
+        tok--;
+    tok++;
+
+    return strdup(tok);
+}
+
+char *
+dirname(const char *path) {
+    char *tok = (char *)path + strlen(path);
+
+    /* Skip basename */
+    while (*tok != '/' && tok > path)
+        tok--;
+
+    const char *tokl = tok;
+    tok--;
+
+    while (*tok != '/' && tok > path)
+        tok--;
+    tok++;
+
+    ssize_t dirname_size = tokl - tok;
+
+    char *dirname         = strndup(tok, dirname_size + 1);
+    dirname[dirname_size] = '\0';
+
+    return dirname;
 }
 
 /*
@@ -570,6 +624,64 @@ brfs_write_entry(const brfs_dir_entry_64_t *dir,
                   new_entry_size, written);
         return -EIO;
     }
+
+    return 0;
+}
+
+int
+brfs_unlink_entry(const char *filename, brfs_dir_entry_64_t *dir,
+                  brfs_dir_entry_64_t *parent_dir) {
+    int err = 0;
+
+    /* Read dir as file */
+    void *dirbuf = malloc(dir->br_file_size);
+
+    if (dir->br_file_size != brfs_read(dir, dirbuf)) {
+        debug_log(1, "brfs_unlink_entry: (I/O) brfs_read");
+        free(dirbuf);
+        return -EIO;
+    }
+
+    size_t offset = 0;
+
+    /* Find entry by filename */
+    brfs_dir_entry_64_t *file_entry = brfs_find_in_dir(filename, dir, &offset);
+    if (!file_entry) {
+        free(dirbuf);
+        return -ENOENT;
+    }
+
+    ssize_t file_entry_size = brfs_sizeof_dir_entry(file_entry);
+    free(file_entry);
+
+    /* Trim entry */
+    memcpy(dirbuf + offset, dirbuf + offset + file_entry_size,
+           dir->br_file_size - offset - file_entry_size);
+
+    /* Resize dir */
+    dir->br_file_size -= file_entry_size;
+
+    /* If is root */
+    if (dir->br_first_block == 1)
+        superblock->br_root_ent.br_file_size = dir->br_file_size;
+
+    /* Rewrite dir data */
+    if (dir->br_file_size !=
+        brfs_write_file_offset(dir, dirbuf, dir->br_file_size, 0)) {
+        debug_log(1, "brfs_unlink_entry: (I/O) brfs_write_file_offset");
+        free(dirbuf);
+        return -EIO;
+    }
+
+    /* Rewrite dir entry to parent */
+    if (parent_dir != NULL && (err = brfs_write_entry(parent_dir, dir)) != 0) {
+        debug_log(1, "brfs_unlink_entry: brfs_write_entry: %s", strerror(err));
+        free(dirbuf);
+        return err;
+    }
+
+    /* Clean up */
+    free(dirbuf);
 
     return 0;
 }
@@ -882,17 +994,17 @@ brfs_fuse_mknod(const char *path, mode_t mode, dev_t dev_t) {
     time_t creation_time = time(NULL);
     debug_log(1, "mknod(\"%s\", %o, %X)\n", path, mode, mode);
 
-    const char *_dirname = dirname(strdup(path));
-    const char *nodname  = basename(strdup(path));
+    const char *dirpath = getParentPath(path);
+    const char *nodname = basename(path);
 
     int err = 0;
 
     /* Find directory */
     brfs_dir_entry_64_t *grandparent_dir;
     brfs_dir_entry_64_t *parent_dir;
-    if ((err = brfs_walk_tree(_dirname, &parent_dir, &grandparent_dir)) < 0) {
+    if ((err = brfs_walk_tree(dirpath, &parent_dir, &grandparent_dir)) < 0) {
         debug_log(1, "brfs_fuse_mknod: error brfs_walk_tree(\"%s\"): %s\n",
-                  _dirname, strerror(err));
+                  dirpath, strerror(err));
         return err;
     }
 
@@ -942,6 +1054,70 @@ brfs_fuse_mkdir(const char *path, mode_t mode) {
                            0 /* TODO: figure out which dev_t to use */);
 }
 
+/** Remove a file */
+int
+brfs_fuse_unlink(const char *path) {
+    int err = 0;
+
+    brfs_dir_entry_64_t *grandparent_dir = NULL;
+    brfs_dir_entry_64_t *parent_dir      = NULL;
+
+    char *filename    = basename(path);
+    char *parent_path = getParentPath(path);
+
+    /* Get parent and grandparent by path */
+    if ((err = brfs_walk_tree(parent_path, &parent_dir, &grandparent_dir)) <
+        0) {
+        debug_log(1, "brfs_fuse_unlink: error brfs_walk_tree(\"%s\"): %s\n",
+                  parent_path, strerror(err));
+
+        free(filename);
+        free(parent_path);
+        if (parent_dir)
+            free(parent_dir);
+        if (grandparent_dir)
+            free(grandparent_dir);
+
+        return err;
+    }
+
+    free(parent_path);
+
+    /* Get file entry before wiping it from it's parent */
+    brfs_dir_entry_64_t *file_entry =
+        brfs_find_in_dir(filename, parent_dir, NULL);
+
+    /* Unlink */
+    if ((err = brfs_unlink_entry(filename, parent_dir, grandparent_dir)) < 0) {
+        debug_log(1, "brfs_fuse_unlink: error brfs_unlink_entry(\"%s\"): %s\n",
+                  path, strerror(err));
+
+        free(filename);
+        if (file_entry)
+            free(file_entry);
+        if (parent_dir)
+            free(parent_dir);
+        if (grandparent_dir)
+            free(grandparent_dir);
+
+        return err;
+    }
+
+    if (grandparent_dir)
+        free(grandparent_dir);
+
+    /* Mark file as removed and setup sbff */
+    brfs_file_delete(file_entry);
+
+    /* Clean up */
+    free(filename);
+    free(file_entry);
+    if (parent_dir)
+        free(parent_dir);
+
+    return 0;
+}
+
 struct fuse_operations brfs_operations = {
     .getattr  = brfs_fuse_getattr,
     .getxattr = brfs_fuse_getxattr,
@@ -953,6 +1129,7 @@ struct fuse_operations brfs_operations = {
     .write    = brfs_fuse_write,
     .mknod    = brfs_fuse_mknod,
     .mkdir    = brfs_fuse_mkdir,
+    .unlink   = brfs_fuse_unlink,
 };
 
 struct brfs_fuse_state {};

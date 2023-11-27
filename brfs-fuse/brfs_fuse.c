@@ -720,22 +720,6 @@ brfs_fuse_getattr(const char *path, struct stat *st) {
     return 0;
 }
 
-/** Get extended attributes */
-int
-brfs_fuse_getxattr(const char *path, const char *name, char *value,
-                   size_t size) {
-    debug_log(1, "getxattr(\"%s\")\n", path);
-    return 0;
-}
-
-/** Set extended attributes */
-int
-brfs_fuse_setxattr(const char *path, const char *name, const char *value,
-                   size_t size, int flags) {
-    debug_log(1, "setxattr(\"%s\")\n", path);
-    return 0;
-}
-
 /** Read directory
  *
  * This supersedes the old getdir() interface.  New applications
@@ -1120,7 +1104,6 @@ brfs_fuse_unlink(const char *path) {
 
 struct fuse_operations brfs_operations = {
     .getattr  = brfs_fuse_getattr,
-    .getxattr = brfs_fuse_getxattr,
     .truncate = brfs_fuse_truncate,
     .utimens  = brfs_fuse_utimens,
     .chown    = brfs_fuse_chown,

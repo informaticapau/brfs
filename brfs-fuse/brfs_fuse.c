@@ -1113,6 +1113,7 @@ struct fuse_operations brfs_operations = {
     .mknod    = brfs_fuse_mknod,
     .mkdir    = brfs_fuse_mkdir,
     .unlink   = brfs_fuse_unlink,
+    .rmdir    = brfs_fuse_unlink,
 };
 
 struct brfs_fuse_state {};

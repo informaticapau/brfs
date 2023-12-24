@@ -869,7 +869,6 @@ brfs_fuse_utimens(const char *path, const struct timespec tv[2]) {
 /** Change the owner and group of a file */
 int
 brfs_fuse_chown(const char *path, uid_t uid, gid_t gid) {
-
     int err = 0;
 
     brfs_dir_entry_64_t *file_parent;
@@ -882,6 +881,26 @@ brfs_fuse_chown(const char *path, uid_t uid, gid_t gid) {
 
     file_entry->br_attributes.br_uid = uid;
     file_entry->br_attributes.br_gid = gid;
+
+    err = brfs_write_entry(file_parent, file_entry);
+
+    return err;
+}
+
+/** Change the permission bits of a file */
+int
+brfs_fuse_chmod(const char *path, mode_t mode) {
+    int err = 0;
+
+    brfs_dir_entry_64_t *file_parent;
+    brfs_dir_entry_64_t *file_entry;
+    if ((err = brfs_walk_tree(path, &file_entry, &file_parent)) < 0) {
+        debug_log(1, "brfs_fuse_chmod: error brfs_walk_tree(\"%s\"): %s\n",
+                  path, strerror(err));
+        return err;
+    }
+
+    file_entry->br_attributes.br_mode = mode;
 
     err = brfs_write_entry(file_parent, file_entry);
 
@@ -1107,6 +1126,7 @@ struct fuse_operations brfs_operations = {
     .truncate = brfs_fuse_truncate,
     .utimens  = brfs_fuse_utimens,
     .chown    = brfs_fuse_chown,
+    .chmod    = brfs_fuse_chmod,
     .readdir  = brfs_fuse_readdir,
     .read     = brfs_fuse_read,
     .write    = brfs_fuse_write,

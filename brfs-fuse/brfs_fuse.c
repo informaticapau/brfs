@@ -205,12 +205,18 @@ brfs_read(const brfs_dir_entry_64_t *entry, void *buf) {
     size_t n_blocks = CALC_N_BLOCKS(entry->br_file_size);
 
     for (size_t i = 0; i < n_blocks; i++) {
-        readed += brfs_read_block(block_idx, buf + readed,
+        int err = brfs_read_block(block_idx, buf + readed,
                                   (i == n_blocks - 1)
                                       ? entry->br_file_size -
                                             (i * block_data_size_bytes)
                                       : block_data_size_bytes);
 
+        /* Check errors */
+        if (err == -1)
+            return err;
+
+        /* Continue to next block */
+        readed += err;
         block_idx = brfs_resolve_next_ptr(block_idx);
     }
 
@@ -944,8 +950,19 @@ brfs_fuse_open(const char *path, struct fuse_file_info *fi) {
 int
 brfs_fuse_read(const char *path, char *buf, size_t size, off_t offset,
                struct fuse_file_info *fi) {
-    debug_log(1, "read(\"%s\")\n", path);
-    return 0;
+    debug_log(1, "read(\"%s\", %zu, %lld)\n", path, size, offset);
+
+    int err = 0;
+
+    brfs_dir_entry_64_t *parent_dir;
+    brfs_dir_entry_64_t *file_entry;
+    if ((err = brfs_walk_tree(path, &file_entry, &parent_dir)) < 0) {
+        debug_log(1, "brfs_fuse_read: error brfs_walk_tree(\"%s\"): %s\n", path,
+                  strerror(err));
+        return err;
+    }
+
+    return brfs_read(file_entry, buf);
 }
 
 /** Write data to an open file

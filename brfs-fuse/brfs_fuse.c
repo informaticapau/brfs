@@ -205,12 +205,18 @@ brfs_read(const brfs_dir_entry_64_t *entry, void *buf) {
     size_t n_blocks = CALC_N_BLOCKS(entry->br_file_size);
 
     for (size_t i = 0; i < n_blocks; i++) {
-        readed += brfs_read_block(block_idx, buf + readed,
+        int err = brfs_read_block(block_idx, buf + readed,
                                   (i == n_blocks - 1)
                                       ? entry->br_file_size -
                                             (i * block_data_size_bytes)
                                       : block_data_size_bytes);
 
+        /* Check errors */
+        if (err == -1)
+            return err;
+
+        /* Continue to next block */
+        readed += err;
         block_idx = brfs_resolve_next_ptr(block_idx);
     }
 
@@ -869,7 +875,6 @@ brfs_fuse_utimens(const char *path, const struct timespec tv[2]) {
 /** Change the owner and group of a file */
 int
 brfs_fuse_chown(const char *path, uid_t uid, gid_t gid) {
-
     int err = 0;
 
     brfs_dir_entry_64_t *file_parent;
@@ -882,6 +887,26 @@ brfs_fuse_chown(const char *path, uid_t uid, gid_t gid) {
 
     file_entry->br_attributes.br_uid = uid;
     file_entry->br_attributes.br_gid = gid;
+
+    err = brfs_write_entry(file_parent, file_entry);
+
+    return err;
+}
+
+/** Change the permission bits of a file */
+int
+brfs_fuse_chmod(const char *path, mode_t mode) {
+    int err = 0;
+
+    brfs_dir_entry_64_t *file_parent;
+    brfs_dir_entry_64_t *file_entry;
+    if ((err = brfs_walk_tree(path, &file_entry, &file_parent)) < 0) {
+        debug_log(1, "brfs_fuse_chmod: error brfs_walk_tree(\"%s\"): %s\n",
+                  path, strerror(err));
+        return err;
+    }
+
+    file_entry->br_attributes.br_mode = mode;
 
     err = brfs_write_entry(file_parent, file_entry);
 
@@ -925,8 +950,19 @@ brfs_fuse_open(const char *path, struct fuse_file_info *fi) {
 int
 brfs_fuse_read(const char *path, char *buf, size_t size, off_t offset,
                struct fuse_file_info *fi) {
-    debug_log(1, "read(\"%s\")\n", path);
-    return 0;
+    debug_log(1, "read(\"%s\", %zu, %lld)\n", path, size, offset);
+
+    int err = 0;
+
+    brfs_dir_entry_64_t *parent_dir;
+    brfs_dir_entry_64_t *file_entry;
+    if ((err = brfs_walk_tree(path, &file_entry, &parent_dir)) < 0) {
+        debug_log(1, "brfs_fuse_read: error brfs_walk_tree(\"%s\"): %s\n", path,
+                  strerror(err));
+        return err;
+    }
+
+    return brfs_read(file_entry, buf);
 }
 
 /** Write data to an open file
@@ -1107,6 +1143,7 @@ struct fuse_operations brfs_operations = {
     .truncate = brfs_fuse_truncate,
     .utimens  = brfs_fuse_utimens,
     .chown    = brfs_fuse_chown,
+    .chmod    = brfs_fuse_chmod,
     .readdir  = brfs_fuse_readdir,
     .read     = brfs_fuse_read,
     .write    = brfs_fuse_write,

@@ -30,12 +30,15 @@
 #include <sys/types.h>
 #include <time.h>
 #include <unistd.h>
+
 #define FUSE_USE_VERSION  26
 #define _FILE_OFFSET_BITS 64
 #include <fuse.h>
 
 #include "../common/brfs.h"
 #include "../common/log.h"
+
+static const char BRFS_MAGIC_BYTES[4] = BRFS_MAGIC;
 
 #define BRFS_FUSE_DATA                                                         \
     (*((struct brfs_fuse_state *)fuse_get_context()->private_data))
@@ -1201,6 +1204,19 @@ main(int argc, char **argv) {
     pointer_size_bytes    = superblock->br_ptr_size;
     block_data_size_bytes = block_size_bytes - pointer_size_bytes;
 
+    /* Check filesystem */
+    if (memcmp(superblock->br_magic, BRFS_MAGIC_BYTES,
+               sizeof(BRFS_MAGIC_BYTES)) != 0) {
+        fprintf(stderr, "Error: %s is not a brfs volume.\n", fsfile);
+        exit(1);
+    }
+    if (superblock->br_ptr_size != 2 && superblock->br_ptr_size != 4 &&
+        superblock->br_ptr_size != 8) {
+        fprintf(stderr, "Error: invalid volume pointer size (bytes) %d,\nthe only valid values are:  2 (16 bits), 4 (32 bits), 8 (64 bits).\n", superblock->br_ptr_size);
+        exit(1);
+    }
+
+    /* Cool */
     printf("Block size: %ld\nPointer size: %d\nFS size: %ld\nFree blocks: "
            "%ld\nFirst free block: %ld\n",
            block_size_bytes, superblock->br_ptr_size, superblock->br_fs_size,

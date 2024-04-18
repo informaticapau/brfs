@@ -7,6 +7,7 @@ pkg_check_modules(FUSE fuse)
 
 file (GLOB FUSE_SRC
     "brfs-fuse/brfs_fuse.c"
+    "core/brfs_core.c"
     "common/log.c"
 )
 
